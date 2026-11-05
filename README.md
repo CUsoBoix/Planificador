@@ -18,4 +18,6 @@ En Outlook, abre el calendario y selecciona **Archivo → Guardar calendario**. 
 
 La página procesa el archivo en el navegador y guarda localmente el asunto, la fecha, la hora y la ubicación de las reuniones futuras. No sincroniza cambios posteriores de Outlook; para actualizar la lista, exporta y carga un archivo nuevo. En cada navegador las reuniones se guardan por separado.
 
+Las reuniones importadas se pueden consultar en las vistas **Semana** y **Mes**. Selecciona un día para ver su agenda; las tareas permanecen en su lista independiente.
+
 El lector iCalendar incluido en `assets/vendor` es ical.js 2.2.1, con licencia Mozilla Public License 2.0 en `assets/vendor/ical.LICENSE`.

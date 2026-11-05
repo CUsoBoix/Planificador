@@ -15,10 +15,20 @@ const meetingCount = document.querySelector("#meeting-count");
 const meetingList = document.querySelector("#meeting-list");
 const meetingEmpty = document.querySelector("#meeting-empty");
 const calendarStatus = document.querySelector("#calendar-status");
+const calendarGrid = document.querySelector("#calendar-grid");
+const calendarPeriod = document.querySelector("#calendar-period");
+const selectedDateLabel = document.querySelector("#selected-date");
+const previousCalendarButton = document.querySelector("#calendar-previous");
+const todayCalendarButton = document.querySelector("#calendar-today");
+const nextCalendarButton = document.querySelector("#calendar-next");
+const calendarViewButtons = document.querySelectorAll("[data-calendar-view]");
 const announcements = document.querySelector("#announcements");
 
 let tasks = loadTasks();
 let meetingCalendar = loadMeetingCalendar();
+let calendarView = "week";
+let calendarCursor = dateOnly(new Date());
+let selectedCalendarDate = dateOnly(new Date());
 
 function loadTasks() {
   try {
@@ -163,20 +173,163 @@ function formatMeetingTime(meeting) {
 function renderMeetings() {
   const meetings = meetingCalendar?.meetings ?? [];
   const hasCalendar = meetingCalendar !== null;
-  const visibleMeetings = meetings.slice(0, 12);
 
   importCalendarButton.textContent = hasCalendar ? "Cambiar .ics" : "Importar .ics";
   removeCalendarButton.hidden = !hasCalendar;
   meetingCount.textContent = hasCalendar
-    ? `${meetings.length} ${meetings.length === 1 ? "reunión próxima" : "reuniones próximas"}${meetings.length > visibleMeetings.length ? " · mostrando 12" : ""}`
+    ? `${meetings.length} ${meetings.length === 1 ? "reunión próxima" : "reuniones próximas"}`
     : "";
-  meetingEmpty.hidden = meetings.length > 0;
-  meetingEmpty.textContent = hasCalendar
-    ? "No hay reuniones próximas en el archivo importado."
-    : "Exporta tu calendario de Outlook como .ics y cárgalo aquí. Las reuniones importadas se guardan solo en este navegador.";
+  renderCalendar();
+}
 
+function dateOnly(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfWeek(date) {
+  const monday = dateOnly(date);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return monday;
+}
+
+function getCalendarDates() {
+  if (calendarView === "week") {
+    const firstDay = startOfWeek(calendarCursor);
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(firstDay);
+      date.setDate(date.getDate() + index);
+      return date;
+    });
+  }
+
+  const firstOfMonth = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+  const firstCell = startOfWeek(firstOfMonth);
+  const dayCount = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + 1, 0).getDate();
+  const cellCount = Math.ceil(((firstOfMonth.getDay() + 6) % 7 + dayCount) / 7) * 7;
+  return Array.from({ length: cellCount }, (_, index) => {
+    const date = new Date(firstCell);
+    date.setDate(date.getDate() + index);
+    return date;
+  });
+}
+
+function formatCalendarPeriod(days) {
+  if (calendarView === "month") {
+    const label = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(calendarCursor);
+    return label[0].toLocaleUpperCase("es-ES") + label.slice(1);
+  }
+
+  const [start, end] = [days[0], days[days.length - 1]];
+  const month = new Intl.DateTimeFormat("es-ES", { month: "short" });
+  if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+    return `${start.getDate()}–${end.getDate()} ${month.format(end)} ${end.getFullYear()}`;
+  }
+  return `${start.getDate()} ${month.format(start)} – ${end.getDate()} ${month.format(end)} ${end.getFullYear()}`;
+}
+
+function meetingsByDate() {
+  const grouped = new Map();
+  for (const meeting of meetingCalendar?.meetings ?? []) {
+    const start = dateOnly(new Date(meeting.start));
+    const end = dateOnly(new Date(meeting.end));
+    const dates = [start];
+
+    if (meeting.allDay) {
+      const cursor = new Date(start);
+      let days = 0;
+      while (cursor < end && days < 366) {
+        dates.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+        days += 1;
+      }
+    }
+
+    for (const date of dates) {
+      const key = dateKey(date);
+      const dayMeetings = grouped.get(key) ?? [];
+      if (!dayMeetings.some((item) => item.id === meeting.id)) dayMeetings.push(meeting);
+      grouped.set(key, dayMeetings);
+    }
+  }
+  return grouped;
+}
+
+function formatDayLabel(date, options = { weekday: "long", day: "numeric", month: "long", year: "numeric" }) {
+  return new Intl.DateTimeFormat("es-ES", options).format(date);
+}
+
+function renderCalendar() {
+  const days = getCalendarDates();
+  const groupedMeetings = meetingsByDate();
+  const currentMonth = calendarCursor.getMonth();
+  const todayKey = dateKey(dateOnly(new Date()));
+  const selectedKey = dateKey(selectedCalendarDate);
+  const weekdayNames = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+
+  calendarPeriod.textContent = formatCalendarPeriod(days);
+  selectedDateLabel.textContent = formatDayLabel(selectedCalendarDate);
+  calendarGrid.className = `calendar-grid is-${calendarView}`;
+  calendarGrid.setAttribute("aria-label", `Calendario ${calendarView === "week" ? "semanal" : "mensual"}: ${calendarPeriod.textContent}`);
+  calendarGrid.replaceChildren();
+  for (const weekday of weekdayNames) {
+    const label = document.createElement("span");
+    label.className = "calendar-weekday";
+    label.textContent = weekday;
+    calendarGrid.append(label);
+  }
+
+  for (const date of days) {
+    const key = dateKey(date);
+    const dayMeetings = groupedMeetings.get(key) ?? [];
+    const cell = document.createElement("button");
+    cell.className = "calendar-day";
+    cell.type = "button";
+    if (calendarView === "month" && date.getMonth() !== currentMonth) cell.classList.add("is-outside-month");
+    if (key === todayKey) cell.classList.add("is-today");
+    if (key === selectedKey) cell.classList.add("is-selected");
+    cell.setAttribute("aria-pressed", String(key === selectedKey));
+    cell.setAttribute("aria-label", `${formatDayLabel(date)}${dayMeetings.length ? `, ${dayMeetings.length} ${dayMeetings.length === 1 ? "reunión" : "reuniones"}` : ""}`);
+
+    const number = document.createElement("span");
+    number.className = "calendar-day-number";
+    number.textContent = String(date.getDate());
+    cell.append(number);
+
+    const maxVisible = calendarView === "week" ? 3 : 2;
+    for (const meeting of dayMeetings.slice(0, maxVisible)) {
+      const eventLabel = document.createElement("span");
+      eventLabel.className = "calendar-event";
+      const start = new Date(meeting.start);
+      const time = meeting.allDay ? "" : `${new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(start)} `;
+      eventLabel.textContent = `${time}${meeting.title}`;
+      eventLabel.title = meeting.title;
+      cell.append(eventLabel);
+    }
+    if (dayMeetings.length > maxVisible) {
+      const more = document.createElement("span");
+      more.className = "calendar-more";
+      more.textContent = `+${dayMeetings.length - maxVisible} más`;
+      cell.append(more);
+    }
+
+    cell.addEventListener("click", () => {
+      selectedCalendarDate = dateOnly(date);
+      calendarCursor = dateOnly(date);
+      renderCalendar();
+    });
+    calendarGrid.append(cell);
+  }
+
+  const selectedMeetings = groupedMeetings.get(selectedKey) ?? [];
   meetingList.replaceChildren();
-  for (const meeting of visibleMeetings) {
+  for (const meeting of selectedMeetings) {
     const row = document.createElement("li");
     row.className = "meeting-item";
 
@@ -188,8 +341,8 @@ function renderMeetings() {
     time.className = "meeting-time";
     time.dateTime = meeting.start;
     time.textContent = formatMeetingTime(meeting);
-
     row.append(title, time);
+
     if (meeting.location) {
       const location = document.createElement("span");
       location.className = "meeting-location";
@@ -198,6 +351,44 @@ function renderMeetings() {
     }
     meetingList.append(row);
   }
+
+  meetingEmpty.hidden = selectedMeetings.length > 0;
+  if (!meetingCalendar) {
+    meetingEmpty.textContent = "Exporta tu calendario de Outlook como .ics y cárgalo aquí. Las reuniones importadas se guardan solo en este navegador.";
+  } else if (meetingCalendar.meetings.length === 0) {
+    meetingEmpty.textContent = "El archivo importado no contiene reuniones futuras.";
+  } else {
+    meetingEmpty.textContent = "No hay reuniones en esta fecha.";
+  }
+
+  for (const button of calendarViewButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.calendarView === calendarView));
+  }
+}
+
+function moveCalendar(step) {
+  if (calendarView === "week") {
+    calendarCursor.setDate(calendarCursor.getDate() + step * 7);
+  } else {
+    calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + step, 1);
+  }
+  selectedCalendarDate = dateOnly(calendarCursor);
+  renderCalendar();
+}
+
+previousCalendarButton.addEventListener("click", () => moveCalendar(-1));
+nextCalendarButton.addEventListener("click", () => moveCalendar(1));
+todayCalendarButton.addEventListener("click", () => {
+  calendarCursor = dateOnly(new Date());
+  selectedCalendarDate = dateOnly(calendarCursor);
+  renderCalendar();
+});
+
+for (const button of calendarViewButtons) {
+  button.addEventListener("click", () => {
+    calendarView = button.dataset.calendarView;
+    renderCalendar();
+  });
 }
 
 function addTask(text) {
@@ -342,6 +533,10 @@ calendarInput.addEventListener("change", async () => {
     const meetings = parseCalendar(await file.text());
     const previousCalendar = meetingCalendar;
     meetingCalendar = { meetings };
+    if (meetings.length > 0) {
+      calendarCursor = dateOnly(new Date(meetings[0].start));
+      selectedCalendarDate = dateOnly(calendarCursor);
+    }
     if (saveMeetingCalendar()) {
       calendarStatus.hidden = true;
       calendarStatus.textContent = "";
