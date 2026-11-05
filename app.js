@@ -383,9 +383,9 @@ function renderCalendar() {
     meetingList.append(row);
   }
 
-  meetingEmpty.hidden = selectedMeetings.length > 0;
+  meetingEmpty.hidden = selectedMeetings.length > 0 || !meetingCalendar;
   if (!meetingCalendar) {
-    meetingEmpty.textContent = "Exporta tu calendario de Outlook como .ics y cárgalo aquí. Las reuniones importadas se guardan solo en este navegador.";
+    meetingEmpty.textContent = "";
   } else if (meetingCalendar.meetings.length === 0) {
     meetingEmpty.textContent = "El archivo importado no contiene reuniones futuras.";
   } else {
