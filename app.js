@@ -8,7 +8,6 @@ const input = document.querySelector("#task-input");
 const list = document.querySelector("#task-list");
 const count = document.querySelector("#task-count");
 const emptyState = document.querySelector("#empty-state");
-const footer = document.querySelector("#page-footer");
 const clearCompletedButton = document.querySelector("#clear-completed");
 const resetAllButton = document.querySelector("#reset-all");
 const importCalendarButton = document.querySelector("#import-calendar");
@@ -24,9 +23,13 @@ const selectedDateLabel = document.querySelector("#selected-date");
 const previousCalendarButton = document.querySelector("#calendar-previous");
 const todayCalendarButton = document.querySelector("#calendar-today");
 const nextCalendarButton = document.querySelector("#calendar-next");
-const calendarViewButtons = document.querySelectorAll("[data-calendar-view]");
+const plannerViewButtons = document.querySelectorAll("[data-planner-view]");
 const announcements = document.querySelector("#announcements");
 const plannerContent = document.querySelector("#planner-content");
+const tasksView = document.querySelector("#task-view");
+const calendarViewSection = document.querySelector("#calendar-view");
+const pageTitle = document.querySelector("#page-title");
+const optionsMenu = document.querySelector("#options-menu");
 const cloudStatus = document.querySelector("#cloud-status");
 const githubLoginButton = document.querySelector("#github-login");
 const githubLogoutButton = document.querySelector("#github-logout");
@@ -137,7 +140,7 @@ function render() {
 
   count.textContent = `${pending} ${pending === 1 ? "tarea pendiente" : "tareas pendientes"}`;
   emptyState.hidden = tasks.length > 0;
-  footer.hidden = completed === 0;
+  clearCompletedButton.hidden = completed === 0;
   list.replaceChildren();
 
   for (const task of tasks) {
@@ -387,9 +390,21 @@ function renderCalendar() {
   } else {
     meetingEmpty.textContent = "No hay reuniones en esta fecha.";
   }
+}
 
-  for (const button of calendarViewButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.calendarView === calendarView));
+function setPlannerView(view) {
+  tasksView.hidden = view !== "tasks";
+  calendarViewSection.hidden = view === "tasks";
+  pageTitle.textContent = view === "tasks" ? "Tareas" : view === "week" ? "Semana" : "Mes";
+  document.title = `${pageTitle.textContent} — Planificador`;
+
+  for (const button of plannerViewButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.plannerView === view));
+  }
+
+  if (view !== "tasks") {
+    calendarView = view;
+    renderCalendar();
   }
 }
 
@@ -411,12 +426,15 @@ todayCalendarButton.addEventListener("click", () => {
   renderCalendar();
 });
 
-for (const button of calendarViewButtons) {
+for (const button of plannerViewButtons) {
   button.addEventListener("click", () => {
-    calendarView = button.dataset.calendarView;
-    renderCalendar();
+    setPlannerView(button.dataset.plannerView);
   });
 }
+
+optionsMenu.addEventListener("click", (event) => {
+  if (event.target.closest(".options-action")) optionsMenu.open = false;
+});
 
 function setCloudStatus(message, state = "info") {
   cloudStatus.textContent = message;

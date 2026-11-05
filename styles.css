@@ -43,13 +43,13 @@ button {
 }
 
 .planner {
-  width: min(100% - 40px, 560px);
+  width: 100%;
   margin: 0 auto;
-  padding: clamp(72px, 14vh, 132px) 0 64px;
+  padding: clamp(24px, 4vh, 52px) clamp(16px, 3vw, 48px) 56px;
 }
 
 .page-header {
-  margin-bottom: 34px;
+  margin-bottom: 24px;
 }
 
 .eyebrow {
@@ -62,7 +62,7 @@ button {
 
 h1 {
   margin: 0;
-  font-size: clamp(36px, 8vw, 46px);
+  font-size: clamp(32px, 5vw, 46px);
   font-weight: 550;
   letter-spacing: -0.055em;
   line-height: 1.05;
@@ -73,6 +73,7 @@ h1 {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+  font-weight: 500;
 }
 
 .planner-toolbar {
@@ -83,12 +84,136 @@ h1 {
   margin-bottom: 16px;
 }
 
+.planner-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.view-navigation {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.view-button {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.view-button:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.view-button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.options-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.options-menu > summary {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+  user-select: none;
+}
+
+.options-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.options-menu > summary::after {
+  width: 7px;
+  height: 7px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  content: "";
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.options-menu[open] > summary,
+.options-menu > summary:hover {
+  border-color: #bdbdbd;
+  background: var(--soft);
+}
+
+.options-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  width: min(280px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 10%);
+}
+
+.options-action {
+  width: 100%;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.options-action:hover {
+  background: var(--soft);
+}
+
+.options-action.is-destructive {
+  margin-top: 3px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 5px 5px;
+  color: #9d3434;
+}
+
+.options-action.is-destructive:hover {
+  background: #fff7f7;
+}
+
+.options-action[hidden] {
+  display: none;
+}
+
 .cloud-auth {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin: 24px 0 28px;
+  margin: 18px 0 24px;
   padding: 0 0 16px;
   border-bottom: 1px solid var(--line);
 }
@@ -327,9 +452,9 @@ h1 {
 }
 
 .meeting-section {
-  margin-top: 42px;
-  padding-top: 22px;
-  border-top: 1px solid var(--line);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .meeting-heading {
@@ -350,31 +475,6 @@ h1 {
   margin: 5px 0 0;
   color: var(--muted);
   font-size: 11px;
-}
-
-.meeting-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.import-button,
-.remove-calendar {
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--white);
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 11px;
-  transition: border-color 150ms ease, background-color 150ms ease;
-}
-
-.import-button:hover,
-.remove-calendar:hover {
-  border-color: #bdbdbd;
-  background: var(--soft);
 }
 
 .remove-calendar[hidden] {
@@ -437,14 +537,13 @@ h1 {
 
 .calendar-toolbar {
   display: grid;
-  grid-template-columns: auto minmax(100px, 1fr) auto;
+  grid-template-columns: auto minmax(100px, 1fr);
   align-items: center;
   gap: 12px;
   margin: 22px 0 12px;
 }
 
-.calendar-navigation,
-.calendar-views {
+.calendar-navigation {
   display: flex;
   align-items: center;
 }
@@ -454,8 +553,7 @@ h1 {
 }
 
 .calendar-nav-button,
-.calendar-today,
-.calendar-view-button {
+.calendar-today {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -490,23 +588,6 @@ h1 {
   font-size: 13px;
   font-weight: 550;
   text-align: center;
-}
-
-.calendar-views {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-.calendar-view-button {
-  padding: 7px 9px;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.calendar-view-button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--white);
 }
 
 .calendar-scroll {
@@ -617,46 +698,6 @@ h1 {
   margin-top: 6px;
 }
 
-.page-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.page-footer[hidden] {
-  display: none;
-}
-
-.clear-button {
-  padding: 5px 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.clear-button:hover {
-  color: var(--ink);
-}
-
-.reset-button {
-  padding: 7px 10px;
-  border: 1px solid #e8c9c9;
-  border-radius: 6px;
-  background: var(--white);
-  color: #9d3434;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.reset-button:hover {
-  border-color: #d99;
-  background: #fff7f7;
-}
-
 button:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
@@ -679,17 +720,41 @@ button:focus-visible {
 }
 
 @media (max-width: 440px) {
+  .planner {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
   .cloud-auth {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .meeting-heading {
-    align-items: flex-start;
+  .planner-controls {
+    align-items: stretch;
+    gap: 8px;
   }
 
-  .meeting-actions {
-    gap: 6px;
+  .view-navigation {
+    flex: 1;
+    justify-content: space-between;
+    gap: 2px;
+  }
+
+  .view-button {
+    flex: 1;
+    padding-right: 8px;
+    padding-left: 8px;
+    font-size: 12px;
+  }
+
+  .options-menu > summary {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .meeting-heading {
+    align-items: flex-start;
   }
 
   .meeting-time {
@@ -714,6 +779,7 @@ button:focus-visible {
     grid-row: 2;
     text-align: left;
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

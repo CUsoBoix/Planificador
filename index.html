@@ -29,69 +29,78 @@
       </section>
 
       <div id="planner-content" hidden>
-        <div class="planner-toolbar">
-          <p class="task-count" id="task-count" aria-live="polite">0 tareas pendientes</p>
-          <button class="reset-button" id="reset-all" type="button">Restablecer todo</button>
-        </div>
-        <form class="task-form" id="task-form">
-        <label class="visually-hidden" for="task-input">Nueva tarea</label>
-        <input
-          id="task-input"
-          name="task"
-          type="text"
-          maxlength="240"
-          placeholder="¿Qué tienes que hacer?"
-          autocomplete="off"
-          required
-        />
-        <button class="add-button" type="submit" aria-label="Añadir tarea" title="Añadir tarea">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
-        </button>
-        </form>
+        <div class="planner-controls">
+          <nav class="view-navigation" aria-label="Vistas del planificador">
+            <button class="view-button" data-planner-view="tasks" type="button" aria-pressed="true">Tareas</button>
+            <button class="view-button" data-planner-view="week" type="button" aria-pressed="false">Semana</button>
+            <button class="view-button" data-planner-view="month" type="button" aria-pressed="false">Mes</button>
+          </nav>
 
-        <section class="task-section" aria-label="Lista de tareas">
-          <ul class="task-list" id="task-list"></ul>
-          <p class="empty-state" id="empty-state">Tus tareas aparecerán aquí.</p>
-        </section>
-
-        <section class="meeting-section" aria-labelledby="meeting-title">
-          <div class="meeting-heading">
-            <div>
-              <h2 id="meeting-title">Reuniones</h2>
-              <p class="meeting-count" id="meeting-count"></p>
-            </div>
-            <div class="meeting-actions">
-              <button class="import-button" id="import-calendar" type="button">Importar .ics</button>
+          <details class="options-menu" id="options-menu">
+            <summary>Opciones</summary>
+            <div class="options-panel">
+              <button class="options-action" id="import-calendar" type="button">Importar .ics</button>
               <input id="calendar-input" type="file" accept=".ics,text/calendar" hidden />
-              <button class="remove-calendar" id="remove-calendar" type="button" hidden>Quitar</button>
+              <button class="options-action" id="remove-calendar" type="button" hidden>Quitar calendario</button>
+              <button class="options-action" id="clear-completed" type="button" hidden>Borrar tareas completadas</button>
+              <button class="options-action is-destructive" id="reset-all" type="button">Restablecer todo</button>
             </div>
+          </details>
+        </div>
+
+        <section class="task-view" id="task-view" aria-label="Tareas">
+          <div class="planner-toolbar">
+            <h2 class="task-count" id="task-count" aria-live="polite">0 tareas pendientes</h2>
           </div>
-          <p class="calendar-status" id="calendar-status" aria-live="polite" hidden></p>
-          <div class="calendar-toolbar">
-            <div class="calendar-navigation" role="group" aria-label="Navegar por el calendario">
-              <button class="calendar-nav-button" id="calendar-previous" type="button" aria-label="Periodo anterior">‹</button>
-              <button class="calendar-today" id="calendar-today" type="button">Hoy</button>
-              <button class="calendar-nav-button" id="calendar-next" type="button" aria-label="Periodo siguiente">›</button>
-            </div>
-            <h3 class="calendar-period" id="calendar-period"></h3>
-            <div class="calendar-views" role="group" aria-label="Vista del calendario">
-              <button class="calendar-view-button" data-calendar-view="week" type="button" aria-pressed="true">Semana</button>
-              <button class="calendar-view-button" data-calendar-view="month" type="button" aria-pressed="false">Mes</button>
-            </div>
-          </div>
-          <div class="calendar-scroll">
-            <div class="calendar-grid is-week" id="calendar-grid" role="group" aria-label="Calendario de reuniones"></div>
-          </div>
-          <div class="selected-agenda">
-            <h3 class="selected-date" id="selected-date"></h3>
-            <ul class="meeting-list" id="meeting-list"></ul>
-          </div>
-          <p class="meeting-empty" id="meeting-empty">Importa un archivo .ics de Outlook para ver tus reuniones.</p>
+          <form class="task-form" id="task-form">
+            <label class="visually-hidden" for="task-input">Nueva tarea</label>
+            <input
+              id="task-input"
+              name="task"
+              type="text"
+              maxlength="240"
+              placeholder="¿Qué tienes que hacer?"
+              autocomplete="off"
+              required
+            />
+            <button class="add-button" type="submit" aria-label="Añadir tarea" title="Añadir tarea">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
+            </button>
+          </form>
+
+          <section class="task-section" aria-label="Lista de tareas">
+            <ul class="task-list" id="task-list"></ul>
+            <p class="empty-state" id="empty-state">Tus tareas aparecerán aquí.</p>
+          </section>
         </section>
 
-        <footer class="page-footer" id="page-footer" hidden>
-          <button class="clear-button" id="clear-completed" type="button">Borrar tareas completadas</button>
-        </footer>
+        <section class="calendar-view" id="calendar-view" aria-label="Calendario de reuniones" hidden>
+          <section class="meeting-section" aria-labelledby="meeting-title">
+            <div class="meeting-heading">
+              <div>
+                <h2 id="meeting-title">Reuniones</h2>
+                <p class="meeting-count" id="meeting-count"></p>
+              </div>
+            </div>
+            <p class="calendar-status" id="calendar-status" aria-live="polite" hidden></p>
+            <div class="calendar-toolbar">
+              <div class="calendar-navigation" role="group" aria-label="Navegar por el calendario">
+                <button class="calendar-nav-button" id="calendar-previous" type="button" aria-label="Periodo anterior">‹</button>
+                <button class="calendar-today" id="calendar-today" type="button">Hoy</button>
+                <button class="calendar-nav-button" id="calendar-next" type="button" aria-label="Periodo siguiente">›</button>
+              </div>
+              <h3 class="calendar-period" id="calendar-period"></h3>
+            </div>
+            <div class="calendar-scroll">
+              <div class="calendar-grid is-week" id="calendar-grid" role="group" aria-label="Calendario de reuniones"></div>
+            </div>
+            <div class="selected-agenda">
+              <h3 class="selected-date" id="selected-date"></h3>
+              <ul class="meeting-list" id="meeting-list"></ul>
+            </div>
+            <p class="meeting-empty" id="meeting-empty">Importa un archivo .ics de Outlook para ver tus reuniones.</p>
+          </section>
+        </section>
       </div>
 
       <p class="visually-hidden" id="announcements" aria-live="polite" aria-atomic="true"></p>
