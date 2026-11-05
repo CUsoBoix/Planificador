@@ -1,5 +1,6 @@
 const storageKey = "planificador-tareas-v1";
 const meetingStorageKey = "planificador-reuniones-v1";
+const cloudBaseStoragePrefix = "planificador-cloud-base-v1:";
 const cloudConfig = globalThis.PLANNER_CLOUD_CONFIG ?? {};
 
 const form = document.querySelector("#task-form");
@@ -38,10 +39,13 @@ let cloudClient = null;
 let cloudUser = null;
 let cloudReady = false;
 let cloudUpdatedAt = null;
+let cloudBaseState = null;
 let cloudProcessingUserId = null;
 let cloudSyncTimer = null;
 let cloudSyncQueue = Promise.resolve();
 let cloudSaving = false;
+let cloudRefreshing = false;
+let cloudLocalRevision = 0;
 let signedOutMessage = "Inicia sesión con GitHub para acceder a tu planificador.";
 
 function loadTasks() {
@@ -438,47 +442,258 @@ function normalizeCloudCalendar(calendar) {
   return { meetings: normalizeMeetings(calendar.meetings) };
 }
 
-function queueCloudSync() {
+function emptyCloudState() {
+  return {
+    tasks: [],
+    meeting_calendar: { imported: false, meetings: [] },
+  };
+}
+
+function cloneCloudState(state) {
+  const calendar = state?.meeting_calendar;
+  return {
+    tasks: normalizeTasks(state?.tasks).map((task) => ({ ...task })),
+    meeting_calendar: calendar?.imported === true
+      ? { imported: true, meetings: normalizeMeetings(calendar.meetings).map((meeting) => ({ ...meeting })) }
+      : { imported: false, meetings: [] },
+  };
+}
+
+function cloudStateFromRecord(record) {
+  return cloneCloudState({
+    tasks: record?.tasks,
+    meeting_calendar: record?.meeting_calendar,
+  });
+}
+
+function loadCloudBase(userId) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`${cloudBaseStoragePrefix}${userId}`) || "null");
+    return saved ? cloneCloudState(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCloudBase(userId, state) {
+  try {
+    localStorage.setItem(
+      `${cloudBaseStoragePrefix}${userId}`,
+      JSON.stringify(cloneCloudState(state)),
+    );
+  } catch {
+    // Cloud state remains authoritative if the local sync base cannot be cached.
+  }
+}
+
+function currentCloudState() {
+  return cloneCloudState({
+    tasks,
+    meeting_calendar: meetingCalendar
+      ? { imported: true, meetings: meetingCalendar.meetings }
+      : { imported: false, meetings: [] },
+  });
+}
+
+function applyCloudState(state) {
+  const normalized = cloneCloudState(state);
+  tasks = normalized.tasks;
+  meetingCalendar = normalized.meeting_calendar.imported
+    ? { meetings: normalized.meeting_calendar.meetings }
+    : null;
+}
+
+function canonicalCloudValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalCloudValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, canonicalCloudValue(item)]),
+    );
+  }
+  return value;
+}
+
+function sameCloudValue(left, right) {
+  return JSON.stringify(canonicalCloudValue(left)) === JSON.stringify(canonicalCloudValue(right));
+}
+
+function mergeCloudItems(baseItems, localItems, remoteItems) {
+  const base = new Map(baseItems.map((item) => [item.id, item]));
+  const local = new Map(localItems.map((item) => [item.id, item]));
+  const remote = new Map(remoteItems.map((item) => [item.id, item]));
+  const ids = new Set([...base.keys(), ...local.keys(), ...remote.keys()]);
+  const merged = [];
+  let conflicts = 0;
+
+  for (const id of ids) {
+    const baseItem = base.get(id);
+    const localItem = local.get(id);
+    const remoteItem = remote.get(id);
+    const localChanged = !sameCloudValue(localItem, baseItem);
+    const remoteChanged = !sameCloudValue(remoteItem, baseItem);
+    let item;
+
+    if (localChanged && remoteChanged && !sameCloudValue(localItem, remoteItem)) {
+      conflicts += 1;
+      if (!localItem) {
+        item = remoteItem;
+      } else if (!remoteItem) {
+        item = localItem;
+      } else {
+        item = {};
+        const fields = new Set([
+          ...Object.keys(baseItem ?? {}),
+          ...Object.keys(localItem),
+          ...Object.keys(remoteItem),
+        ]);
+        for (const field of fields) {
+          const baseValue = baseItem?.[field];
+          const localValue = localItem[field];
+          const remoteValue = remoteItem[field];
+          const localFieldChanged = !sameCloudValue(localValue, baseValue);
+          const remoteFieldChanged = !sameCloudValue(remoteValue, baseValue);
+          const value = localFieldChanged ? localValue : remoteValue;
+          if (value !== undefined) item[field] = value;
+          if (localFieldChanged && remoteFieldChanged && !sameCloudValue(localValue, remoteValue)) {
+            conflicts += 1;
+          }
+        }
+      }
+    } else {
+      item = localChanged ? localItem : remoteItem;
+    }
+
+    if (item) merged.push(item);
+  }
+
+  return { items: merged, conflicts };
+}
+
+function mergeCloudStates(baseState, localState, remoteState) {
+  const base = cloneCloudState(baseState ?? emptyCloudState());
+  const local = cloneCloudState(localState);
+  const remote = cloneCloudState(remoteState);
+  const tasksResult = mergeCloudItems(base.tasks, local.tasks, remote.tasks);
+  const meetingsResult = mergeCloudItems(
+    base.meeting_calendar.meetings,
+    local.meeting_calendar.meetings,
+    remote.meeting_calendar.meetings,
+  );
+  const localImportedChanged = !sameCloudValue(
+    local.meeting_calendar.imported,
+    base.meeting_calendar.imported,
+  );
+  const remoteImportedChanged = !sameCloudValue(
+    remote.meeting_calendar.imported,
+    base.meeting_calendar.imported,
+  );
+  const imported = localImportedChanged
+    ? local.meeting_calendar.imported
+    : remote.meeting_calendar.imported;
+
+  return {
+    state: {
+      tasks: tasksResult.items,
+      meeting_calendar: {
+        imported,
+        meetings: imported ? meetingsResult.items : [],
+      },
+    },
+    conflicts: tasksResult.conflicts + meetingsResult.conflicts
+      + Number(
+        localImportedChanged
+        && remoteImportedChanged
+        && !sameCloudValue(local.meeting_calendar.imported, remote.meeting_calendar.imported),
+      ),
+  };
+}
+
+function scheduleCloudSync() {
   if (!cloudReady || !cloudUser) return;
   window.clearTimeout(cloudSyncTimer);
   cloudSyncTimer = window.setTimeout(() => {
     cloudSyncTimer = null;
     cloudSyncQueue = cloudSyncQueue
       .then(() => persistCloudState())
-      .catch(() => setCloudStatus("No se pudieron sincronizar los cambios.", "error"));
+      .catch((error) => {
+        setCloudStatus(
+          `No se pudieron sincronizar los cambios. Siguen guardados en este navegador. ${error.message || ""}`.trim(),
+          "error",
+        );
+        announcements.textContent = "No se pudieron sincronizar los cambios con la nube.";
+      });
   }, 450);
+}
+
+function queueCloudSync() {
+  if (!cloudReady || !cloudUser) return;
+  cloudLocalRevision += 1;
+  scheduleCloudSync();
+}
+
+async function reconcileCloudConflict() {
+  const { data: saved, error } = await cloudClient
+    .from("planner_state")
+    .select("tasks, meeting_calendar, updated_at")
+    .eq("user_id", cloudUser.id)
+    .maybeSingle();
+  if (error) throw error;
+
+  const remoteState = saved ? cloudStateFromRecord(saved) : emptyCloudState();
+  const { state, conflicts } = mergeCloudStates(
+    cloudBaseState,
+    currentCloudState(),
+    remoteState,
+  );
+
+  cloudBaseState = cloneCloudState(remoteState);
+  saveCloudBase(cloudUser.id, cloudBaseState);
+  cloudUpdatedAt = saved?.updated_at ?? null;
+  applyCloudState(state);
+  writeLocalSnapshot();
+  render();
+  setCloudStatus(
+    conflicts > 0
+      ? "Se combinaron cambios de otro dispositivo. Revisa los elementos editados a la vez; guardando…"
+      : "Se combinaron cambios de otro dispositivo. Guardando…",
+    "busy",
+  );
+  scheduleCloudSync();
 }
 
 async function persistCloudState() {
   if (!cloudReady || !cloudUser) return false;
 
-  const changedAt = new Date().toISOString();
-  const payload = {
-    user_id: cloudUser.id,
-    tasks,
-    meeting_calendar: meetingCalendar
-      ? { imported: true, meetings: meetingCalendar.meetings }
-      : { imported: false, meetings: [] },
-    updated_at: changedAt,
-  };
-
+  const sentRevision = cloudLocalRevision;
+  const sentState = currentCloudState();
   cloudSaving = true;
   setCloudStatus("Sincronizando cambios…", "busy");
   try {
-    const { data, error } = await cloudClient
-      .from("planner_state")
-      .upsert(payload, { onConflict: "user_id" })
-      .select("updated_at")
-      .single();
+    const { data, error } = await cloudClient.rpc("save_planner_state", {
+      p_tasks: sentState.tasks,
+      p_meeting_calendar: sentState.meeting_calendar,
+      p_expected_updated_at: cloudUpdatedAt,
+    });
 
     if (error) throw error;
-    cloudUpdatedAt = data.updated_at || changedAt;
-    setCloudStatus("Sincronizado con GitHub · CUsoBoix", "success");
+    if (!data) {
+      await reconcileCloudConflict();
+      return false;
+    }
+
+    cloudUpdatedAt = data;
+    cloudBaseState = cloneCloudState(sentState);
+    saveCloudBase(cloudUser.id, cloudBaseState);
+    if (sentRevision !== cloudLocalRevision) {
+      setCloudStatus("Guardando los últimos cambios…", "busy");
+      scheduleCloudSync();
+      return true;
+    }
+
+    setCloudStatus("Sincronizado con la nube", "success");
     return true;
-  } catch (error) {
-    setCloudStatus(`No se pudo sincronizar. Los cambios quedan en este navegador. ${error.message || ""}`.trim(), "error");
-    announcements.textContent = "No se pudo sincronizar el planificador con la nube.";
-    return false;
   } finally {
     cloudSaving = false;
   }
@@ -490,15 +705,9 @@ async function activateCloudSession(session) {
   if ((cloudReady && cloudUser?.id === user.id) || cloudProcessingUserId === user.id) return;
 
   cloudProcessingUserId = user.id;
+  let mergedConflicts = 0;
+  let cloudNeedsMergeSave = false;
   try {
-    const { data: isAllowed, error: allowError } = await cloudClient.rpc("is_allowed_github_user");
-    if (allowError) throw allowError;
-    if (isAllowed !== true) {
-      signedOutMessage = "Acceso restringido al perfil de GitHub CUsoBoix.";
-      await cloudClient.auth.signOut();
-      return;
-    }
-
     cloudUser = user;
     githubLoginButton.hidden = true;
     githubLogoutButton.hidden = false;
@@ -511,10 +720,20 @@ async function activateCloudSession(session) {
     if (loadError) throw loadError;
 
     if (saved) {
-      tasks = normalizeTasks(saved.tasks);
-      meetingCalendar = normalizeCloudCalendar(saved.meeting_calendar);
+      const localState = currentCloudState();
+      const previousBase = loadCloudBase(user.id) ?? emptyCloudState();
+      const remoteState = cloudStateFromRecord(saved);
+      const merged = mergeCloudStates(previousBase, localState, remoteState);
+      cloudBaseState = cloneCloudState(remoteState);
+      applyCloudState(merged.state);
+      mergedConflicts = merged.conflicts;
+      cloudNeedsMergeSave = !sameCloudValue(merged.state, remoteState);
+      saveCloudBase(user.id, cloudBaseState);
       cloudUpdatedAt = saved.updated_at;
       writeLocalSnapshot();
+    } else {
+      cloudBaseState = emptyCloudState();
+      cloudUpdatedAt = null;
     }
 
     cloudReady = true;
@@ -523,15 +742,31 @@ async function activateCloudSession(session) {
 
     if (!saved) {
       await persistCloudState();
+    } else if (cloudNeedsMergeSave) {
+      setCloudStatus(
+        mergedConflicts > 0
+          ? "Combinando tus datos de este navegador con la nube…"
+          : "Guardando datos de este navegador en la nube…",
+        "busy",
+      );
+      queueCloudSync();
     } else {
-      setCloudStatus("Sincronizado con GitHub · CUsoBoix", "success");
+      setCloudStatus("Sincronizado con la nube", "success");
     }
   } catch (error) {
     cloudReady = false;
+    cloudUser = null;
+    cloudUpdatedAt = null;
+    cloudBaseState = null;
     plannerContent.hidden = true;
     githubLoginButton.hidden = true;
     githubLogoutButton.hidden = false;
-    setCloudStatus(`No se pudo cargar el planificador en la nube. ${error.message || ""}`.trim(), "error");
+    setCloudStatus(
+      error?.code === "42501"
+        ? "Esta cuenta de GitHub no tiene acceso al planificador."
+        : `No se pudo cargar el planificador en la nube. ${error.message || ""}`.trim(),
+      "error",
+    );
   } finally {
     cloudProcessingUserId = null;
   }
@@ -573,6 +808,7 @@ async function initializeCloud() {
       cloudReady = false;
       cloudUser = null;
       cloudUpdatedAt = null;
+      cloudBaseState = null;
       window.clearTimeout(cloudSyncTimer);
       plannerContent.hidden = true;
       githubLoginButton.hidden = false;
@@ -598,21 +834,36 @@ async function initializeCloud() {
 }
 
 async function refreshCloudState() {
-  if (!cloudReady || !cloudUser || cloudSaving || cloudSyncTimer) return;
+  if (!cloudReady || !cloudUser || cloudSaving || cloudSyncTimer || cloudRefreshing) return;
 
-  const { data, error } = await cloudClient
-    .from("planner_state")
-    .select("tasks, meeting_calendar, updated_at")
-    .eq("user_id", cloudUser.id)
-    .maybeSingle();
-  if (error || !data || Date.parse(data.updated_at) <= Date.parse(cloudUpdatedAt || "1970-01-01")) return;
+  const localRevision = cloudLocalRevision;
+  cloudRefreshing = true;
+  try {
+    const { data, error } = await cloudClient
+      .from("planner_state")
+      .select("tasks, meeting_calendar, updated_at")
+      .eq("user_id", cloudUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || Date.parse(data.updated_at) <= Date.parse(cloudUpdatedAt || "1970-01-01")) return;
 
-  tasks = normalizeTasks(data.tasks);
-  meetingCalendar = normalizeCloudCalendar(data.meeting_calendar);
-  cloudUpdatedAt = data.updated_at;
-  writeLocalSnapshot();
-  render();
-  setCloudStatus("Sincronizado con GitHub · CUsoBoix", "success");
+    if (localRevision !== cloudLocalRevision || cloudSaving || cloudSyncTimer) {
+      if (!cloudSyncTimer) scheduleCloudSync();
+      return;
+    }
+
+    cloudBaseState = cloudStateFromRecord(data);
+    applyCloudState(cloudBaseState);
+    saveCloudBase(cloudUser.id, cloudBaseState);
+    cloudUpdatedAt = data.updated_at;
+    writeLocalSnapshot();
+    render();
+    setCloudStatus("Sincronizado con la nube", "success");
+  } catch {
+    setCloudStatus("No se pudo comprobar la nube; los datos locales siguen disponibles.", "warning");
+  } finally {
+    cloudRefreshing = false;
+  }
 }
 
 githubLoginButton.addEventListener("click", async () => {

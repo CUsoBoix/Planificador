@@ -24,7 +24,9 @@ El lector iCalendar incluido en `assets/vendor` es ical.js 2.2.1, con licencia M
 
 ## Sincronización con GitHub y Supabase
 
-La sincronización usa Supabase Auth con GitHub y una tabla privada con políticas RLS. El acceso a la base de datos está limitado al identificador inmutable del perfil GitHub **CUsoBoix** (`183085251`). Las tareas y el calendario importado se sincronizan al guardar; otros dispositivos cargan el mismo estado al iniciar sesión. La web no ofrece acceso anónimo.
+La sincronización usa Supabase Auth con GitHub y una tabla privada con políticas RLS. El acceso a la base de datos está limitado al identificador inmutable del perfil GitHub **CUsoBoix** (`183085251`). Al iniciar sesión por primera vez, combina las tareas y reuniones que ya había en ese navegador con el estado de la nube. Después sincroniza cada cambio y carga las actualizaciones al volver a la página.
+
+Si dos dispositivos guardan a la vez, la aplicación compara la revisión del servidor y combina cambios por identificador para evitar que un guardado antiguo reemplace todo el estado. La web no ofrece acceso anónimo.
 
 Para activar el servicio:
 
