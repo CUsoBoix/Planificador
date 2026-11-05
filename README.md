@@ -14,7 +14,7 @@ La fuente Inter está incluida en `assets/fonts` y se distribuye bajo la licenci
 
 ## Importar reuniones desde Outlook LTSC 2021
 
-En Outlook, abre el calendario y selecciona **Archivo → Guardar calendario**. Guarda el archivo en formato **iCalendar (.ics)**. En **Más opciones**, elige el periodo que quieras importar (la app muestra el próximo año) y un nivel de detalle que incluya el asunto. Después, en Planificador, pulsa **Importar .ics** y selecciona ese archivo.
+En Outlook, abre el calendario y selecciona **Archivo → Guardar calendario**. Guarda el archivo en formato **iCalendar (.ics)**. En **Más opciones**, elige el periodo que quieras importar (la app muestra el próximo año) y un nivel de detalle que incluya el asunto. Después, en Planificador, abre **Opciones → Importar .ics** y selecciona ese archivo.
 
 La página procesa el archivo en el navegador; no sube el `.ics` original ni guarda descripciones o asistentes. Sincroniza en Supabase solo el asunto, fecha, hora y ubicación de las reuniones futuras. Para reflejar cambios posteriores de Outlook, exporta y carga un archivo nuevo.
 
