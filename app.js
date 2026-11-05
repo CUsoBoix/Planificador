@@ -137,8 +137,7 @@ function render() {
 
   count.textContent = `${pending} ${pending === 1 ? "tarea pendiente" : "tareas pendientes"}`;
   emptyState.hidden = tasks.length > 0;
-  footer.hidden = false;
-  clearCompletedButton.hidden = completed === 0;
+  footer.hidden = completed === 0;
   list.replaceChildren();
 
   for (const task of tasks) {

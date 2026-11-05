@@ -29,7 +29,10 @@
       </section>
 
       <div id="planner-content" hidden>
-        <p class="task-count" id="task-count" aria-live="polite">0 tareas pendientes</p>
+        <div class="planner-toolbar">
+          <p class="task-count" id="task-count" aria-live="polite">0 tareas pendientes</p>
+          <button class="reset-button" id="reset-all" type="button">Restablecer todo</button>
+        </div>
         <form class="task-form" id="task-form">
         <label class="visually-hidden" for="task-input">Nueva tarea</label>
         <input
@@ -88,7 +91,6 @@
 
         <footer class="page-footer" id="page-footer" hidden>
           <button class="clear-button" id="clear-completed" type="button">Borrar tareas completadas</button>
-          <button class="reset-button" id="reset-all" type="button">Restablecer todo</button>
         </footer>
       </div>
 
