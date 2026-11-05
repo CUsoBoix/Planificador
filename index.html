@@ -9,6 +9,8 @@
     <link rel="preload" href="./assets/fonts/inter-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./styles.css" />
     <script src="./assets/vendor/ical.min.js" defer></script>
+    <script src="./assets/vendor/supabase.min.js" defer></script>
+    <script src="./cloud-config.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -16,10 +18,19 @@
       <header class="page-header">
         <p class="eyebrow">PLANIFICADOR</p>
         <h1 id="page-title">Tareas</h1>
-        <p class="task-count" id="task-count" aria-live="polite">0 tareas pendientes</p>
       </header>
 
-      <form class="task-form" id="task-form">
+      <section class="cloud-auth" aria-label="Acceso y sincronización">
+        <p class="cloud-status" id="cloud-status" role="status" aria-live="polite">Comprobando almacenamiento en la nube…</p>
+        <div class="cloud-actions">
+          <button class="github-login" id="github-login" type="button" hidden>Iniciar sesión con GitHub</button>
+          <button class="github-logout" id="github-logout" type="button" hidden>Cerrar sesión</button>
+        </div>
+      </section>
+
+      <div id="planner-content" hidden>
+        <p class="task-count" id="task-count" aria-live="polite">0 tareas pendientes</p>
+        <form class="task-form" id="task-form">
         <label class="visually-hidden" for="task-input">Nueva tarea</label>
         <input
           id="task-input"
@@ -33,51 +44,53 @@
         <button class="add-button" type="submit" aria-label="Añadir tarea" title="Añadir tarea">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
         </button>
-      </form>
+        </form>
 
-      <section class="task-section" aria-label="Lista de tareas">
-        <ul class="task-list" id="task-list"></ul>
-        <p class="empty-state" id="empty-state">Tus tareas aparecerán aquí.</p>
-      </section>
+        <section class="task-section" aria-label="Lista de tareas">
+          <ul class="task-list" id="task-list"></ul>
+          <p class="empty-state" id="empty-state">Tus tareas aparecerán aquí.</p>
+        </section>
 
-      <section class="meeting-section" aria-labelledby="meeting-title">
-        <div class="meeting-heading">
-          <div>
-            <h2 id="meeting-title">Reuniones</h2>
-            <p class="meeting-count" id="meeting-count"></p>
+        <section class="meeting-section" aria-labelledby="meeting-title">
+          <div class="meeting-heading">
+            <div>
+              <h2 id="meeting-title">Reuniones</h2>
+              <p class="meeting-count" id="meeting-count"></p>
+            </div>
+            <div class="meeting-actions">
+              <button class="import-button" id="import-calendar" type="button">Importar .ics</button>
+              <input id="calendar-input" type="file" accept=".ics,text/calendar" hidden />
+              <button class="remove-calendar" id="remove-calendar" type="button" hidden>Quitar</button>
+            </div>
           </div>
-          <div class="meeting-actions">
-            <button class="import-button" id="import-calendar" type="button">Importar .ics</button>
-            <input id="calendar-input" type="file" accept=".ics,text/calendar" hidden />
-            <button class="remove-calendar" id="remove-calendar" type="button" hidden>Quitar</button>
+          <p class="calendar-status" id="calendar-status" aria-live="polite" hidden></p>
+          <div class="calendar-toolbar">
+            <div class="calendar-navigation" role="group" aria-label="Navegar por el calendario">
+              <button class="calendar-nav-button" id="calendar-previous" type="button" aria-label="Periodo anterior">‹</button>
+              <button class="calendar-today" id="calendar-today" type="button">Hoy</button>
+              <button class="calendar-nav-button" id="calendar-next" type="button" aria-label="Periodo siguiente">›</button>
+            </div>
+            <h3 class="calendar-period" id="calendar-period"></h3>
+            <div class="calendar-views" role="group" aria-label="Vista del calendario">
+              <button class="calendar-view-button" data-calendar-view="week" type="button" aria-pressed="true">Semana</button>
+              <button class="calendar-view-button" data-calendar-view="month" type="button" aria-pressed="false">Mes</button>
+            </div>
           </div>
-        </div>
-        <p class="calendar-status" id="calendar-status" aria-live="polite" hidden></p>
-        <div class="calendar-toolbar">
-          <div class="calendar-navigation" role="group" aria-label="Navegar por el calendario">
-            <button class="calendar-nav-button" id="calendar-previous" type="button" aria-label="Periodo anterior">‹</button>
-            <button class="calendar-today" id="calendar-today" type="button">Hoy</button>
-            <button class="calendar-nav-button" id="calendar-next" type="button" aria-label="Periodo siguiente">›</button>
+          <div class="calendar-scroll">
+            <div class="calendar-grid is-week" id="calendar-grid" role="group" aria-label="Calendario de reuniones"></div>
           </div>
-          <h3 class="calendar-period" id="calendar-period"></h3>
-          <div class="calendar-views" role="group" aria-label="Vista del calendario">
-            <button class="calendar-view-button" data-calendar-view="week" type="button" aria-pressed="true">Semana</button>
-            <button class="calendar-view-button" data-calendar-view="month" type="button" aria-pressed="false">Mes</button>
+          <div class="selected-agenda">
+            <h3 class="selected-date" id="selected-date"></h3>
+            <ul class="meeting-list" id="meeting-list"></ul>
           </div>
-        </div>
-        <div class="calendar-scroll">
-          <div class="calendar-grid is-week" id="calendar-grid" role="group" aria-label="Calendario de reuniones"></div>
-        </div>
-        <div class="selected-agenda">
-          <h3 class="selected-date" id="selected-date"></h3>
-          <ul class="meeting-list" id="meeting-list"></ul>
-        </div>
-        <p class="meeting-empty" id="meeting-empty">Importa un archivo .ics para ver tus reuniones. Los datos se guardan solo en este navegador.</p>
-      </section>
+          <p class="meeting-empty" id="meeting-empty">Importa un archivo .ics de Outlook para ver tus reuniones.</p>
+        </section>
 
-      <footer class="page-footer" id="page-footer" hidden>
-        <button class="clear-button" id="clear-completed" type="button">Borrar tareas completadas</button>
-      </footer>
+        <footer class="page-footer" id="page-footer" hidden>
+          <button class="clear-button" id="clear-completed" type="button">Borrar tareas completadas</button>
+        </footer>
+      </div>
+
       <p class="visually-hidden" id="announcements" aria-live="polite" aria-atomic="true"></p>
     </main>
   </body>

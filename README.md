@@ -1,6 +1,6 @@
 # Planificador
 
-Una lista de tareas sencilla. No necesita instalación ni servicios externos; las tareas se guardan en el almacenamiento local del navegador.
+Una lista sencilla de tareas y reuniones importadas. Las reuniones se cargan desde archivos `.ics` de Outlook.
 
 Para abrirla, sirve esta carpeta con cualquier servidor estático. Por ejemplo:
 
@@ -16,8 +16,25 @@ La fuente Inter está incluida en `assets/fonts` y se distribuye bajo la licenci
 
 En Outlook, abre el calendario y selecciona **Archivo → Guardar calendario**. Guarda el archivo en formato **iCalendar (.ics)**. En **Más opciones**, elige el periodo que quieras importar (la app muestra el próximo año) y un nivel de detalle que incluya el asunto. Después, en Planificador, pulsa **Importar .ics** y selecciona ese archivo.
 
-La página procesa el archivo en el navegador y guarda localmente el asunto, la fecha, la hora y la ubicación de las reuniones futuras. No sincroniza cambios posteriores de Outlook; para actualizar la lista, exporta y carga un archivo nuevo. En cada navegador las reuniones se guardan por separado.
+La página procesa el archivo en el navegador; no sube el `.ics` original ni guarda descripciones o asistentes. Sincroniza en Supabase solo el asunto, fecha, hora y ubicación de las reuniones futuras. Para reflejar cambios posteriores de Outlook, exporta y carga un archivo nuevo.
 
 Las reuniones importadas se pueden consultar en las vistas **Semana** y **Mes**. Selecciona un día para ver su agenda; las tareas permanecen en su lista independiente.
 
 El lector iCalendar incluido en `assets/vendor` es ical.js 2.2.1, con licencia Mozilla Public License 2.0 en `assets/vendor/ical.LICENSE`.
+
+## Sincronización con GitHub y Supabase
+
+La sincronización usa Supabase Auth con GitHub y una tabla privada con políticas RLS. El acceso a la base de datos está limitado al identificador inmutable del perfil GitHub **CUsoBoix** (`183085251`). Las tareas y el calendario importado se sincronizan al guardar; otros dispositivos cargan el mismo estado al iniciar sesión. La web no ofrece acceso anónimo.
+
+Para activar el servicio:
+
+1. Crea un proyecto en Supabase.
+2. En GitHub, crea una OAuth App con la página principal `https://cusoboix.github.io/Planificador/` y callback `https://<project-ref>.supabase.co/auth/v1/callback`.
+3. En Supabase, activa **Authentication → Providers → GitHub** y pega allí el Client ID y Client Secret de la OAuth App. El secreto se queda en Supabase; no lo pongas en este repositorio ni en `cloud-config.js`.
+4. En **Authentication → URL Configuration**, configura la URL del sitio como `https://cusoboix.github.io/Planificador/` y permite esa misma URL como redirect.
+5. Ejecuta [`supabase/setup.sql`](supabase/setup.sql) en el SQL Editor de Supabase. La política valida el ID de GitHub también en la base de datos.
+6. En los ajustes de API del proyecto, copia la URL del proyecto y su clave **publishable** (o `anon`). Añádelas a `cloud-config.js` y publica el sitio.
+
+La clave publishable está diseñada para aparecer en una app web. La seguridad depende de la política RLS del SQL; nunca uses la clave `service_role` en el navegador.
+
+El cliente web incluido en `assets/vendor` es `@supabase/supabase-js` 2.119.0, con licencia MIT en `assets/vendor/supabase.LICENSE`.

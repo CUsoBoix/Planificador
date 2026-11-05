@@ -75,6 +75,78 @@ h1 {
   font-size: 13px;
 }
 
+.cloud-auth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 24px 0 28px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cloud-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cloud-status[data-state="success"] {
+  color: #4d7657;
+}
+
+.cloud-status[data-state="warning"],
+.cloud-status[data-state="error"] {
+  color: #9d3434;
+}
+
+.cloud-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.github-login,
+.github-logout {
+  padding: 9px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--white);
+  cursor: pointer;
+  font-size: 11px;
+  transition: opacity 150ms ease, background-color 150ms ease;
+}
+
+.github-login:hover,
+.github-logout:hover {
+  background: #383838;
+}
+
+.github-login:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.github-logout {
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--muted);
+}
+
+.github-logout:hover {
+  border-color: #bdbdbd;
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.github-login[hidden],
+.github-logout[hidden] {
+  display: none;
+}
+
 .task-form {
   display: flex;
   align-items: center;
@@ -582,6 +654,11 @@ button:focus-visible {
 }
 
 @media (max-width: 440px) {
+  .cloud-auth {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .meeting-heading {
     align-items: flex-start;
   }

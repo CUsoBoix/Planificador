@@ -1,5 +1,6 @@
 const storageKey = "planificador-tareas-v1";
 const meetingStorageKey = "planificador-reuniones-v1";
+const cloudConfig = globalThis.PLANNER_CLOUD_CONFIG ?? {};
 
 const form = document.querySelector("#task-form");
 const input = document.querySelector("#task-input");
@@ -23,27 +24,58 @@ const todayCalendarButton = document.querySelector("#calendar-today");
 const nextCalendarButton = document.querySelector("#calendar-next");
 const calendarViewButtons = document.querySelectorAll("[data-calendar-view]");
 const announcements = document.querySelector("#announcements");
+const plannerContent = document.querySelector("#planner-content");
+const cloudStatus = document.querySelector("#cloud-status");
+const githubLoginButton = document.querySelector("#github-login");
+const githubLogoutButton = document.querySelector("#github-logout");
 
 let tasks = loadTasks();
 let meetingCalendar = loadMeetingCalendar();
 let calendarView = "week";
 let calendarCursor = dateOnly(new Date());
 let selectedCalendarDate = dateOnly(new Date());
+let cloudClient = null;
+let cloudUser = null;
+let cloudReady = false;
+let cloudUpdatedAt = null;
+let cloudProcessingUserId = null;
+let cloudSyncTimer = null;
+let cloudSyncQueue = Promise.resolve();
+let cloudSaving = false;
+let signedOutMessage = "Inicia sesión con GitHub para acceder a tu planificador.";
 
 function loadTasks() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
-    if (!Array.isArray(saved)) return [];
-
-    return saved.filter((task) => (
-      task
-      && typeof task.id === "string"
-      && typeof task.text === "string"
-      && typeof task.completed === "boolean"
-    ));
+    return normalizeTasks(saved);
   } catch {
     return [];
   }
+}
+
+function normalizeTasks(saved) {
+  if (!Array.isArray(saved)) return [];
+  return saved.filter((task) => (
+    task
+    && typeof task.id === "string"
+    && typeof task.text === "string"
+    && typeof task.completed === "boolean"
+  ));
+}
+
+function normalizeMeetings(saved) {
+  if (!Array.isArray(saved)) return [];
+  return saved.filter((meeting) => (
+    meeting
+    && typeof meeting.id === "string"
+    && typeof meeting.title === "string"
+    && typeof meeting.start === "string"
+    && Number.isFinite(Date.parse(meeting.start))
+    && typeof meeting.end === "string"
+    && Number.isFinite(Date.parse(meeting.end))
+    && typeof meeting.allDay === "boolean"
+    && typeof meeting.location === "string"
+  ));
 }
 
 function saveTasks() {
@@ -52,6 +84,7 @@ function saveTasks() {
   } catch {
     announcements.textContent = "No se han podido guardar los cambios en este dispositivo.";
   }
+  queueCloudSync();
 }
 
 function loadMeetingCalendar() {
@@ -59,19 +92,7 @@ function loadMeetingCalendar() {
     const saved = JSON.parse(localStorage.getItem(meetingStorageKey) || "null");
     if (!saved || !Array.isArray(saved.meetings)) return null;
 
-    return {
-      meetings: saved.meetings.filter((meeting) => (
-        meeting
-        && typeof meeting.id === "string"
-        && typeof meeting.title === "string"
-        && typeof meeting.start === "string"
-        && Number.isFinite(Date.parse(meeting.start))
-        && typeof meeting.end === "string"
-        && Number.isFinite(Date.parse(meeting.end))
-        && typeof meeting.allDay === "boolean"
-        && typeof meeting.location === "string"
-      )),
-    };
+    return { meetings: normalizeMeetings(saved.meetings) };
   } catch {
     return null;
   }
@@ -84,6 +105,7 @@ function saveMeetingCalendar() {
     } else {
       localStorage.removeItem(meetingStorageKey);
     }
+    queueCloudSync();
     return true;
   } catch {
     calendarStatus.textContent = "No se han podido guardar las reuniones en este navegador.";
@@ -391,6 +413,237 @@ for (const button of calendarViewButtons) {
   });
 }
 
+function setCloudStatus(message, state = "info") {
+  cloudStatus.textContent = message;
+  cloudStatus.dataset.state = state;
+}
+
+function writeLocalSnapshot() {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(tasks));
+    if (meetingCalendar) {
+      localStorage.setItem(meetingStorageKey, JSON.stringify(meetingCalendar));
+    } else {
+      localStorage.removeItem(meetingStorageKey);
+    }
+    return true;
+  } catch {
+    setCloudStatus("Conectado. El navegador no pudo guardar una copia local.", "warning");
+    return false;
+  }
+}
+
+function normalizeCloudCalendar(calendar) {
+  if (!calendar || calendar.imported !== true) return null;
+  return { meetings: normalizeMeetings(calendar.meetings) };
+}
+
+function queueCloudSync() {
+  if (!cloudReady || !cloudUser) return;
+  window.clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = window.setTimeout(() => {
+    cloudSyncTimer = null;
+    cloudSyncQueue = cloudSyncQueue
+      .then(() => persistCloudState())
+      .catch(() => setCloudStatus("No se pudieron sincronizar los cambios.", "error"));
+  }, 450);
+}
+
+async function persistCloudState() {
+  if (!cloudReady || !cloudUser) return false;
+
+  const changedAt = new Date().toISOString();
+  const payload = {
+    user_id: cloudUser.id,
+    tasks,
+    meeting_calendar: meetingCalendar
+      ? { imported: true, meetings: meetingCalendar.meetings }
+      : { imported: false, meetings: [] },
+    updated_at: changedAt,
+  };
+
+  cloudSaving = true;
+  setCloudStatus("Sincronizando cambios…", "busy");
+  try {
+    const { data, error } = await cloudClient
+      .from("planner_state")
+      .upsert(payload, { onConflict: "user_id" })
+      .select("updated_at")
+      .single();
+
+    if (error) throw error;
+    cloudUpdatedAt = data.updated_at || changedAt;
+    setCloudStatus("Sincronizado con GitHub · CUsoBoix", "success");
+    return true;
+  } catch (error) {
+    setCloudStatus(`No se pudo sincronizar. Los cambios quedan en este navegador. ${error.message || ""}`.trim(), "error");
+    announcements.textContent = "No se pudo sincronizar el planificador con la nube.";
+    return false;
+  } finally {
+    cloudSaving = false;
+  }
+}
+
+async function activateCloudSession(session) {
+  const user = session?.user;
+  if (!user?.id || !cloudClient) return;
+  if ((cloudReady && cloudUser?.id === user.id) || cloudProcessingUserId === user.id) return;
+
+  cloudProcessingUserId = user.id;
+  try {
+    const { data: isAllowed, error: allowError } = await cloudClient.rpc("is_allowed_github_user");
+    if (allowError) throw allowError;
+    if (isAllowed !== true) {
+      signedOutMessage = "Acceso restringido al perfil de GitHub CUsoBoix.";
+      await cloudClient.auth.signOut();
+      return;
+    }
+
+    cloudUser = user;
+    githubLoginButton.hidden = true;
+    githubLogoutButton.hidden = false;
+
+    const { data: saved, error: loadError } = await cloudClient
+      .from("planner_state")
+      .select("tasks, meeting_calendar, updated_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (loadError) throw loadError;
+
+    if (saved) {
+      tasks = normalizeTasks(saved.tasks);
+      meetingCalendar = normalizeCloudCalendar(saved.meeting_calendar);
+      cloudUpdatedAt = saved.updated_at;
+      writeLocalSnapshot();
+    }
+
+    cloudReady = true;
+    plannerContent.hidden = false;
+    render();
+
+    if (!saved) {
+      await persistCloudState();
+    } else {
+      setCloudStatus("Sincronizado con GitHub · CUsoBoix", "success");
+    }
+  } catch (error) {
+    cloudReady = false;
+    plannerContent.hidden = true;
+    githubLoginButton.hidden = true;
+    githubLogoutButton.hidden = false;
+    setCloudStatus(`No se pudo cargar el planificador en la nube. ${error.message || ""}`.trim(), "error");
+  } finally {
+    cloudProcessingUserId = null;
+  }
+}
+
+async function initializeCloud() {
+  const configured = typeof cloudConfig.supabaseUrl === "string"
+    && cloudConfig.supabaseUrl.startsWith("https://")
+    && typeof cloudConfig.supabasePublishableKey === "string"
+    && cloudConfig.supabasePublishableKey.length > 10;
+
+  plannerContent.hidden = true;
+  if (!configured) {
+    githubLoginButton.hidden = false;
+    githubLoginButton.disabled = true;
+    setCloudStatus("Falta configurar el proyecto de almacenamiento en la nube.", "warning");
+    return;
+  }
+
+  if (!globalThis.supabase?.createClient) {
+    githubLoginButton.hidden = false;
+    githubLoginButton.disabled = true;
+    setCloudStatus("No se pudo cargar el cliente de almacenamiento.", "error");
+    return;
+  }
+
+  cloudClient = globalThis.supabase.createClient(
+    cloudConfig.supabaseUrl,
+    cloudConfig.supabasePublishableKey,
+    { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } },
+  );
+
+  githubLoginButton.hidden = false;
+  githubLoginButton.disabled = false;
+  setCloudStatus("Inicia sesión con GitHub para acceder a tu planificador.");
+
+  cloudClient.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_OUT") {
+      cloudReady = false;
+      cloudUser = null;
+      cloudUpdatedAt = null;
+      window.clearTimeout(cloudSyncTimer);
+      plannerContent.hidden = true;
+      githubLoginButton.hidden = false;
+      githubLoginButton.disabled = false;
+      githubLogoutButton.hidden = true;
+      setCloudStatus(signedOutMessage, "info");
+      return;
+    }
+
+    if (session && ["INITIAL_SESSION", "SIGNED_IN"].includes(event)) {
+      window.setTimeout(() => activateCloudSession(session), 0);
+    }
+  });
+
+  const { data: sessionData, error } = await cloudClient.auth.getSession();
+  if (error) {
+    setCloudStatus("No se pudo recuperar la sesión de GitHub.", "error");
+    return;
+  }
+  if (sessionData.session) {
+    await activateCloudSession(sessionData.session);
+  }
+}
+
+async function refreshCloudState() {
+  if (!cloudReady || !cloudUser || cloudSaving || cloudSyncTimer) return;
+
+  const { data, error } = await cloudClient
+    .from("planner_state")
+    .select("tasks, meeting_calendar, updated_at")
+    .eq("user_id", cloudUser.id)
+    .maybeSingle();
+  if (error || !data || Date.parse(data.updated_at) <= Date.parse(cloudUpdatedAt || "1970-01-01")) return;
+
+  tasks = normalizeTasks(data.tasks);
+  meetingCalendar = normalizeCloudCalendar(data.meeting_calendar);
+  cloudUpdatedAt = data.updated_at;
+  writeLocalSnapshot();
+  render();
+  setCloudStatus("Sincronizado con GitHub · CUsoBoix", "success");
+}
+
+githubLoginButton.addEventListener("click", async () => {
+  if (!cloudClient) return;
+  githubLoginButton.disabled = true;
+  setCloudStatus("Conectando con GitHub…", "busy");
+
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await cloudClient.auth.signInWithOAuth({
+    provider: "github",
+    options: { redirectTo },
+  });
+
+  if (error) {
+    githubLoginButton.disabled = false;
+    setCloudStatus(`No se pudo iniciar sesión con GitHub. ${error.message}`, "error");
+  }
+});
+
+githubLogoutButton.addEventListener("click", async () => {
+  if (!cloudClient) return;
+  signedOutMessage = "Sesión cerrada.";
+  const { error } = await cloudClient.auth.signOut();
+  if (error) setCloudStatus(`No se pudo cerrar la sesión. ${error.message}`, "error");
+});
+
+window.addEventListener("focus", refreshCloudState);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshCloudState();
+});
+
 function addTask(text) {
   const task = {
     id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -569,3 +822,4 @@ removeCalendarButton.addEventListener("click", () => {
 });
 
 render();
+initializeCloud();
