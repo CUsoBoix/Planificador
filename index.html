@@ -16,17 +16,30 @@
   <body>
     <main class="planner" aria-labelledby="page-title">
       <header class="page-header">
-        <p class="eyebrow">PLANIFICADOR</p>
-        <h1 id="page-title">Tareas</h1>
-      </header>
-
-      <section class="cloud-auth" aria-label="Acceso y sincronización">
-        <p class="cloud-status" id="cloud-status" role="status" aria-live="polite">Comprobando almacenamiento en la nube…</p>
-        <div class="cloud-actions">
-          <button class="github-login" id="github-login" type="button" hidden>Iniciar sesión con GitHub</button>
-          <button class="github-logout" id="github-logout" type="button" hidden>Cerrar sesión</button>
+        <div class="page-heading">
+          <p class="eyebrow">PLANIFICADOR</p>
+          <h1 id="page-title">Tareas</h1>
         </div>
-      </section>
+        <details class="options-menu" id="options-menu">
+          <summary>Opciones</summary>
+          <div class="options-panel">
+            <section class="cloud-options" aria-label="Sincronización en la nube">
+              <p class="cloud-status" id="cloud-status" role="status" aria-live="polite">Comprobando almacenamiento en la nube…</p>
+              <div class="cloud-actions">
+                <button class="github-login" id="github-login" type="button" hidden>Iniciar sesión con GitHub</button>
+                <button class="github-logout" id="github-logout" type="button" hidden>Cerrar sesión</button>
+              </div>
+            </section>
+            <div class="planner-options" id="planner-options" hidden>
+              <button class="options-action" id="import-calendar" type="button">Importar .ics</button>
+              <input id="calendar-input" type="file" accept=".ics,text/calendar" hidden />
+              <button class="options-action" id="remove-calendar" type="button" hidden>Quitar calendario</button>
+              <button class="options-action" id="clear-completed" type="button" hidden>Borrar tareas completadas</button>
+              <button class="options-action is-destructive" id="reset-all" type="button">Restablecer todo</button>
+            </div>
+          </div>
+        </details>
+      </header>
 
       <div id="planner-content" hidden>
         <div class="planner-controls">
@@ -35,17 +48,6 @@
             <button class="view-button" data-planner-view="week" type="button" aria-pressed="false">Semana</button>
             <button class="view-button" data-planner-view="month" type="button" aria-pressed="false">Mes</button>
           </nav>
-
-          <details class="options-menu" id="options-menu">
-            <summary>Opciones</summary>
-            <div class="options-panel">
-              <button class="options-action" id="import-calendar" type="button">Importar .ics</button>
-              <input id="calendar-input" type="file" accept=".ics,text/calendar" hidden />
-              <button class="options-action" id="remove-calendar" type="button" hidden>Quitar calendario</button>
-              <button class="options-action" id="clear-completed" type="button" hidden>Borrar tareas completadas</button>
-              <button class="options-action is-destructive" id="reset-all" type="button">Restablecer todo</button>
-            </div>
-          </details>
         </div>
 
         <section class="task-view" id="task-view" aria-label="Tareas">

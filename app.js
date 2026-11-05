@@ -30,6 +30,7 @@ const tasksView = document.querySelector("#task-view");
 const calendarViewSection = document.querySelector("#calendar-view");
 const pageTitle = document.querySelector("#page-title");
 const optionsMenu = document.querySelector("#options-menu");
+const plannerOptions = document.querySelector("#planner-options");
 const cloudStatus = document.querySelector("#cloud-status");
 const githubLoginButton = document.querySelector("#github-login");
 const githubLogoutButton = document.querySelector("#github-logout");
@@ -730,6 +731,8 @@ async function activateCloudSession(session) {
     cloudUser = user;
     githubLoginButton.hidden = true;
     githubLogoutButton.hidden = false;
+    plannerOptions.hidden = true;
+    setCloudStatus("Cargando datos de la nube…", "busy");
 
     const { data: saved, error: loadError } = await cloudClient
       .from("planner_state")
@@ -756,6 +759,7 @@ async function activateCloudSession(session) {
     }
 
     cloudReady = true;
+    plannerOptions.hidden = false;
     plannerContent.hidden = false;
     render();
 
@@ -777,6 +781,7 @@ async function activateCloudSession(session) {
     cloudUser = null;
     cloudUpdatedAt = null;
     cloudBaseState = null;
+    plannerOptions.hidden = true;
     plannerContent.hidden = true;
     githubLoginButton.hidden = true;
     githubLogoutButton.hidden = false;
@@ -798,6 +803,7 @@ async function initializeCloud() {
     && cloudConfig.supabasePublishableKey.length > 10;
 
   plannerContent.hidden = true;
+  plannerOptions.hidden = true;
   if (!configured) {
     githubLoginButton.hidden = false;
     githubLoginButton.disabled = true;
@@ -829,6 +835,7 @@ async function initializeCloud() {
       cloudUpdatedAt = null;
       cloudBaseState = null;
       window.clearTimeout(cloudSyncTimer);
+      plannerOptions.hidden = true;
       plannerContent.hidden = true;
       githubLoginButton.hidden = false;
       githubLoginButton.disabled = false;
