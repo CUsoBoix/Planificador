@@ -1,4 +1,5 @@
 const storageKey = "planificador-tareas-v1";
+const meetingStorageKey = "planificador-reuniones-v1";
 
 const form = document.querySelector("#task-form");
 const input = document.querySelector("#task-input");
@@ -7,9 +8,17 @@ const count = document.querySelector("#task-count");
 const emptyState = document.querySelector("#empty-state");
 const footer = document.querySelector("#page-footer");
 const clearCompletedButton = document.querySelector("#clear-completed");
+const importCalendarButton = document.querySelector("#import-calendar");
+const calendarInput = document.querySelector("#calendar-input");
+const removeCalendarButton = document.querySelector("#remove-calendar");
+const meetingCount = document.querySelector("#meeting-count");
+const meetingList = document.querySelector("#meeting-list");
+const meetingEmpty = document.querySelector("#meeting-empty");
+const calendarStatus = document.querySelector("#calendar-status");
 const announcements = document.querySelector("#announcements");
 
 let tasks = loadTasks();
+let meetingCalendar = loadMeetingCalendar();
 
 function loadTasks() {
   try {
@@ -32,6 +41,45 @@ function saveTasks() {
     localStorage.setItem(storageKey, JSON.stringify(tasks));
   } catch {
     announcements.textContent = "No se han podido guardar los cambios en este dispositivo.";
+  }
+}
+
+function loadMeetingCalendar() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(meetingStorageKey) || "null");
+    if (!saved || !Array.isArray(saved.meetings)) return null;
+
+    return {
+      meetings: saved.meetings.filter((meeting) => (
+        meeting
+        && typeof meeting.id === "string"
+        && typeof meeting.title === "string"
+        && typeof meeting.start === "string"
+        && Number.isFinite(Date.parse(meeting.start))
+        && typeof meeting.end === "string"
+        && Number.isFinite(Date.parse(meeting.end))
+        && typeof meeting.allDay === "boolean"
+        && typeof meeting.location === "string"
+      )),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveMeetingCalendar() {
+  try {
+    if (meetingCalendar) {
+      localStorage.setItem(meetingStorageKey, JSON.stringify(meetingCalendar));
+    } else {
+      localStorage.removeItem(meetingStorageKey);
+    }
+    return true;
+  } catch {
+    calendarStatus.textContent = "No se han podido guardar las reuniones en este navegador.";
+    calendarStatus.hidden = false;
+    announcements.textContent = "No se han podido guardar las reuniones en este navegador.";
+    return false;
   }
 }
 
@@ -82,6 +130,74 @@ function render() {
     row.append(check, text, remove);
     list.append(row);
   }
+
+  renderMeetings();
+}
+
+function formatMeetingTime(meeting) {
+  const start = new Date(meeting.start);
+  const end = new Date(meeting.end);
+  const dateLabel = new Intl.DateTimeFormat("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(start);
+
+  if (meeting.allDay) return `${dateLabel} · todo el día`;
+
+  const timeOptions = { hour: "2-digit", minute: "2-digit" };
+  const startTime = new Intl.DateTimeFormat("es-ES", timeOptions).format(start);
+  const endTime = new Intl.DateTimeFormat("es-ES", timeOptions).format(end);
+  if (start.toDateString() === end.toDateString()) return `${dateLabel} · ${startTime}–${endTime}`;
+
+  const endLabel = new Intl.DateTimeFormat("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(end);
+  return `${dateLabel}, ${startTime} – ${endLabel}`;
+}
+
+function renderMeetings() {
+  const meetings = meetingCalendar?.meetings ?? [];
+  const hasCalendar = meetingCalendar !== null;
+  const visibleMeetings = meetings.slice(0, 12);
+
+  importCalendarButton.textContent = hasCalendar ? "Cambiar .ics" : "Importar .ics";
+  removeCalendarButton.hidden = !hasCalendar;
+  meetingCount.textContent = hasCalendar
+    ? `${meetings.length} ${meetings.length === 1 ? "reunión próxima" : "reuniones próximas"}${meetings.length > visibleMeetings.length ? " · mostrando 12" : ""}`
+    : "";
+  meetingEmpty.hidden = meetings.length > 0;
+  meetingEmpty.textContent = hasCalendar
+    ? "No hay reuniones próximas en el archivo importado."
+    : "Exporta tu calendario de Outlook como .ics y cárgalo aquí. Las reuniones importadas se guardan solo en este navegador.";
+
+  meetingList.replaceChildren();
+  for (const meeting of visibleMeetings) {
+    const row = document.createElement("li");
+    row.className = "meeting-item";
+
+    const title = document.createElement("span");
+    title.className = "meeting-name";
+    title.textContent = meeting.title;
+
+    const time = document.createElement("time");
+    time.className = "meeting-time";
+    time.dateTime = meeting.start;
+    time.textContent = formatMeetingTime(meeting);
+
+    row.append(title, time);
+    if (meeting.location) {
+      const location = document.createElement("span");
+      location.className = "meeting-location";
+      location.textContent = meeting.location;
+      row.append(location);
+    }
+    meetingList.append(row);
+  }
 }
 
 function addTask(text) {
@@ -126,6 +242,135 @@ clearCompletedButton.addEventListener("click", () => {
   saveTasks();
   render();
   announcements.textContent = `${removed} ${removed === 1 ? "tarea completada borrada" : "tareas completadas borradas"}.`;
+});
+
+function parseCalendar(icsText) {
+  if (!globalThis.ICAL?.parse) {
+    throw new Error("No se pudo cargar el lector de archivos .ics.");
+  }
+
+  const calendar = new ICAL.Component(ICAL.parse(icsText));
+  if (calendar.name !== "vcalendar") {
+    throw new Error("El archivo no tiene un calendario iCalendar válido.");
+  }
+
+  for (const timezone of calendar.getAllSubcomponents("vtimezone")) {
+    ICAL.TimezoneService.register(timezone);
+  }
+
+  const components = calendar.getAllSubcomponents("vevent");
+  if (components.length === 0) {
+    throw new Error("El archivo no contiene reuniones.");
+  }
+  if (components.length > 5000) {
+    throw new Error("El calendario es demasiado grande. Exporta un periodo más corto desde Outlook.");
+  }
+
+  const exceptionsByUid = new Map();
+  for (const component of components) {
+    if (!component.hasProperty("recurrence-id")) continue;
+    const uid = component.getFirstPropertyValue("uid") ?? "";
+    const exceptions = exceptionsByUid.get(uid) ?? [];
+    exceptions.push(component);
+    exceptionsByUid.set(uid, exceptions);
+  }
+
+  const now = new Date();
+  const horizon = new Date(now);
+  horizon.setFullYear(horizon.getFullYear() + 1);
+  const meetings = [];
+  let inspected = 0;
+
+  for (const component of components) {
+    if (component.hasProperty("recurrence-id")) continue;
+
+    const uid = component.getFirstPropertyValue("uid") ?? "";
+    const event = new ICAL.Event(component, {
+      exceptions: exceptionsByUid.get(uid) ?? [],
+    });
+    if (!event.startDate) continue;
+
+    const iterator = event.iterator();
+    let occurrence;
+    let eventOccurrences = 0;
+    while ((occurrence = iterator.next())) {
+      eventOccurrences += 1;
+      inspected += 1;
+      if (eventOccurrences > 10000 || inspected > 50000) {
+        throw new Error("El calendario tiene demasiadas repeticiones. Exporta un periodo más corto desde Outlook.");
+      }
+
+      const details = event.getOccurrenceDetails(occurrence);
+      const item = details.item ?? event;
+      const status = item.component.getFirstPropertyValue("status");
+      if (String(status ?? "").toUpperCase() === "CANCELLED") continue;
+
+      const start = details.startDate?.toJSDate();
+      const end = details.endDate?.toJSDate();
+      if (!start || !end || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) continue;
+      if (start > horizon) break;
+      if (end <= now) continue;
+
+      meetings.push({
+        id: `${uid || item.summary || "reunion"}-${start.toISOString()}`,
+        title: item.summary || "Reunión",
+        start: start.toISOString(),
+        end: end.toISOString(),
+        allDay: details.startDate.isDate,
+        location: item.location || "",
+      });
+      if (meetings.length > 5000) {
+        throw new Error("El calendario contiene demasiadas reuniones. Exporta un periodo más corto desde Outlook.");
+      }
+    }
+  }
+
+  return meetings.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+}
+
+importCalendarButton.addEventListener("click", () => calendarInput.click());
+
+calendarInput.addEventListener("change", async () => {
+  const [file] = calendarInput.files ?? [];
+  if (!file) return;
+
+  try {
+    if (file.size > 8 * 1024 * 1024) {
+      throw new Error("El archivo supera 8 MB. Exporta un periodo más corto desde Outlook.");
+    }
+
+    const meetings = parseCalendar(await file.text());
+    const previousCalendar = meetingCalendar;
+    meetingCalendar = { meetings };
+    if (saveMeetingCalendar()) {
+      calendarStatus.hidden = true;
+      calendarStatus.textContent = "";
+      renderMeetings();
+      announcements.textContent = `${meetings.length} ${meetings.length === 1 ? "reunión próxima importada" : "reuniones próximas importadas"}.`;
+    } else {
+      meetingCalendar = previousCalendar;
+    }
+  } catch (error) {
+    const message = `No se pudo importar el calendario: ${error.message || "revisa el archivo .ics"}`;
+    calendarStatus.textContent = message;
+    calendarStatus.hidden = false;
+    announcements.textContent = message;
+  } finally {
+    calendarInput.value = "";
+  }
+});
+
+removeCalendarButton.addEventListener("click", () => {
+  const previousCalendar = meetingCalendar;
+  meetingCalendar = null;
+  if (saveMeetingCalendar()) {
+    calendarStatus.hidden = true;
+    calendarStatus.textContent = "";
+    renderMeetings();
+    announcements.textContent = "Calendario de reuniones quitado.";
+  } else {
+    meetingCalendar = previousCalendar;
+  }
 });
 
 render();

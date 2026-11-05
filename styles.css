@@ -246,6 +246,115 @@ h1 {
   font-size: 13px;
 }
 
+.meeting-section {
+  margin-top: 42px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.meeting-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.meeting-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: -0.025em;
+}
+
+.meeting-count {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.meeting-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.import-button,
+.remove-calendar {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 11px;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.import-button:hover,
+.remove-calendar:hover {
+  border-color: #bdbdbd;
+  background: var(--soft);
+}
+
+.remove-calendar[hidden] {
+  display: none;
+}
+
+.meeting-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meeting-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.meeting-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.meeting-time {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.meeting-location {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.meeting-empty {
+  margin: 0;
+  padding: 15px 0 0;
+  color: #a1a1a1;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.calendar-status {
+  margin: 12px 0 0;
+  color: #9d3434;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.calendar-status[hidden] {
+  display: none;
+}
+
 .page-footer {
   display: flex;
   justify-content: flex-end;
@@ -287,6 +396,26 @@ button:focus-visible {
 @media (hover: none) {
   .delete-button {
     opacity: 1;
+  }
+}
+
+@media (max-width: 440px) {
+  .meeting-heading {
+    align-items: flex-start;
+  }
+
+  .meeting-actions {
+    gap: 6px;
+  }
+
+  .meeting-time {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    text-align: left;
+  }
+
+  .meeting-location {
+    grid-row: 3;
   }
 }
 

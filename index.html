@@ -8,6 +8,7 @@
     <title>Tareas — Planificador</title>
     <link rel="preload" href="./assets/fonts/inter-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./styles.css" />
+    <script src="./assets/vendor/ical.min.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -37,6 +38,23 @@
       <section class="task-section" aria-label="Lista de tareas">
         <ul class="task-list" id="task-list"></ul>
         <p class="empty-state" id="empty-state">Tus tareas aparecerán aquí.</p>
+      </section>
+
+      <section class="meeting-section" aria-labelledby="meeting-title">
+        <div class="meeting-heading">
+          <div>
+            <h2 id="meeting-title">Reuniones</h2>
+            <p class="meeting-count" id="meeting-count"></p>
+          </div>
+          <div class="meeting-actions">
+            <button class="import-button" id="import-calendar" type="button">Importar .ics</button>
+            <input id="calendar-input" type="file" accept=".ics,text/calendar" hidden />
+            <button class="remove-calendar" id="remove-calendar" type="button" hidden>Quitar</button>
+          </div>
+        </div>
+        <p class="calendar-status" id="calendar-status" aria-live="polite" hidden></p>
+        <ul class="meeting-list" id="meeting-list"></ul>
+        <p class="meeting-empty" id="meeting-empty">Exporta tu calendario de Outlook como .ics y cárgalo aquí. El archivo se guarda solo en este navegador.</p>
       </section>
 
       <footer class="page-footer" id="page-footer" hidden>
