@@ -611,7 +611,9 @@ h1 {
 
 .page-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 18px;
 }
 
@@ -630,6 +632,21 @@ h1 {
 
 .clear-button:hover {
   color: var(--ink);
+}
+
+.reset-button {
+  padding: 7px 10px;
+  border: 1px solid #e8c9c9;
+  border-radius: 6px;
+  background: var(--white);
+  color: #9d3434;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.reset-button:hover {
+  border-color: #d99;
+  background: #fff7f7;
 }
 
 button:focus-visible {

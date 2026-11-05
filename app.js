@@ -10,6 +10,7 @@ const count = document.querySelector("#task-count");
 const emptyState = document.querySelector("#empty-state");
 const footer = document.querySelector("#page-footer");
 const clearCompletedButton = document.querySelector("#clear-completed");
+const resetAllButton = document.querySelector("#reset-all");
 const importCalendarButton = document.querySelector("#import-calendar");
 const calendarInput = document.querySelector("#calendar-input");
 const removeCalendarButton = document.querySelector("#remove-calendar");
@@ -136,7 +137,8 @@ function render() {
 
   count.textContent = `${pending} ${pending === 1 ? "tarea pendiente" : "tareas pendientes"}`;
   emptyState.hidden = tasks.length > 0;
-  footer.hidden = completed === 0;
+  footer.hidden = false;
+  clearCompletedButton.hidden = completed === 0;
   list.replaceChildren();
 
   for (const task of tasks) {
@@ -937,6 +939,28 @@ clearCompletedButton.addEventListener("click", () => {
   saveTasks();
   render();
   announcements.textContent = `${removed} ${removed === 1 ? "tarea completada borrada" : "tareas completadas borradas"}.`;
+});
+
+resetAllButton.addEventListener("click", () => {
+  const confirmed = window.confirm(
+    "¿Restablecer todo? Se borrarán todas las tareas y reuniones de este navegador y de la nube. Esta acción no se puede deshacer.",
+  );
+  if (!confirmed) return;
+
+  tasks = [];
+  meetingCalendar = null;
+  calendarStatus.textContent = "";
+  calendarStatus.hidden = true;
+  const localSaved = writeLocalSnapshot();
+  queueCloudSync();
+  render();
+  setCloudStatus(
+    localSaved
+      ? "Restableciendo todos los datos…"
+      : "No se pudo guardar localmente; se intentará restablecer en la nube.",
+    localSaved ? "busy" : "warning",
+  );
+  announcements.textContent = "Se está restableciendo todo el planificador.";
 });
 
 function parseCalendar(icsText) {
