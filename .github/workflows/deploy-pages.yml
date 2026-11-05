@@ -23,10 +23,8 @@ jobs:
     steps:
       - name: Get source
         uses: actions/checkout@v4
-      - name: Enable Pages
+      - name: Configure Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Package website
         uses: actions/upload-pages-artifact@v3
         with:
