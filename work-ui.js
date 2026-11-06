@@ -11,6 +11,7 @@
     sortBy = "Prioridad",
     groupBy = "Sin agrupar";
   const selectedTasks = new Set();
+  let selecting = false;
   let initializedUser = null;
   const uid = () => crypto.randomUUID(),
     now = () => new Date().toISOString();
@@ -41,6 +42,16 @@
       p.setAttribute("role", "status");
       $(".work-toolbar").after(p);
     }
+    let modalMessage = dialog.querySelector(".dialog-message");
+    if (dialog.open) {
+      if (!modalMessage) {
+        modalMessage = h("p", undefined, "dialog-message");
+        modalMessage.setAttribute("role", "status");
+        dialog.children[0]?.after(modalMessage);
+      }
+      modalMessage.textContent = text;
+      modalMessage.className = `dialog-message ${error ? "work-error" : "work-notice"}`;
+    }
     p.textContent = text;
     p.className = error ? "work-error" : "work-notice";
   }
@@ -63,6 +74,19 @@
     const e = h("div", undefined, "work-row");
     e.append(...children);
     return e;
+  }
+  function disclosure(label, expanded = false) {
+    const details = h("details", undefined, "disclosure");
+    details.open = expanded;
+    details.append(h("summary", label));
+    return details;
+  }
+  function moveFields(parent, inputs) {
+    for (const input of inputs) parent.append(input.closest("label"));
+  }
+  function primary(control) {
+    control.classList.add("primary-action");
+    return control;
   }
   function field(parent, label, value = "", type = "text", choices) {
     const wrap = h("label", label, "work-field");
@@ -106,7 +130,28 @@
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(value));
-  function open(title) {
+  let dialogKey = null;
+  const expandedSections = new Map();
+  function rememberSections() {
+    if (dialogKey)
+      expandedSections.set(
+        dialogKey,
+        [...dialog.querySelectorAll("details[open] > summary")].map(
+          (x) => x.textContent,
+        ),
+      );
+  }
+  function restoreSections() {
+    const expanded = expandedSections.get(dialogKey);
+    if (!expanded) return;
+    for (const details of dialog.querySelectorAll("details"))
+      details.open = expanded.includes(
+        details.querySelector("summary")?.textContent,
+      );
+  }
+  function open(title, key = title) {
+    rememberSections();
+    dialogKey = key;
     dialog.replaceChildren(
       row(
         h("h2", title),
@@ -164,14 +209,17 @@
       ),
     );
     const due = field(f, "Fecha límite", "", "date");
-    const priority = field(f, "Prioridad manual", 0, "text", [
+    const options = disclosure("Añadir detalles");
+    f.append(options);
+    const priority = field(options, "Prioridad manual", 0, "text", [
       [0, "Automática"],
       [1, "Importante"],
       [2, "Urgente"],
     ]);
-    const project = field(f, "Proyecto", "", "text", projectOptions());
-    const immediate = check(f, "Ya está completada", false);
-    const submit = h("button", "Crear y añadir otra");
+    const project = field(options, "Proyecto", "", "text", projectOptions());
+    const immediate = check(options, "Ya está completada", false);
+    const another = check(options, "Crear otra después", false);
+    const submit = primary(h("button", "Crear tarea"));
     submit.type = "submit";
     f.append(submit);
     f.addEventListener("submit", (e) => {
@@ -199,8 +247,10 @@
         tasks.push(t);
         history(t, "Creada");
         save();
-        title.value = "";
-        title.focus();
+        if (another.checked) {
+          title.value = "";
+          title.focus();
+        } else dialog.close();
       } catch (e) {
         message(e.message, true);
       }
@@ -476,8 +526,7 @@
     );
     parent.append(checklist);
     const docs = h("details");
-    docs.open = true;
-    docs.append(h("summary", "Documentación · Markdown"));
+    docs.append(h("summary", "Documentación"));
     const editor = field(docs, "Documento", entity.documents || "", "textarea");
     editor.rows = 10;
     let timer;
@@ -541,8 +590,10 @@
       }),
       preview,
     );
+    const versions = disclosure("Versiones anteriores");
+    if (entity.versions?.length) docs.append(versions);
     for (const version of [...(entity.versions || [])].reverse())
-      docs.append(
+      versions.append(
         button(`Recuperar ${dateLabel(version.at)}`, () => {
           if (confirm("¿Recuperar esta versión? Se conservará la actual.")) {
             editor.value = version.text;
@@ -602,6 +653,7 @@
     for (const event of [...(entity.history || [])].reverse())
       logs.append(h("p", `${dateLabel(event.at)} · ${event.action}`));
     parent.append(logs);
+    restoreSections();
   }
   function allAttachments() {
     return [...tasks, ...workState.projects, ...workState.recurrences].flatMap(
@@ -627,9 +679,18 @@
   function taskDetail(id) {
     const t = tasks.find((t) => t.id === id);
     if (!t) return;
-    open(t.text);
+    open(t.text, t.id);
     const top = h("div", undefined, "work-grid");
     dialog.append(top);
+    const advanced = disclosure("Más detalles y prioridad"),
+      advancedGrid = h("div", undefined, "work-grid");
+    advanced.append(advancedGrid);
+    const followUp = disclosure(
+        "Seguimiento de terceros",
+        t.status === "En espera",
+      ),
+      followGrid = h("div", undefined, "work-grid");
+    followUp.append(followGrid);
     const title = field(top, "Título", t.text);
     const status = field(top, "Estado", t.status, "text", [
       "Bandeja de entrada",
@@ -683,6 +744,25 @@
     );
     const next = field(top, "Próximo paso", t.nextStep);
     const description = field(dialog, "Descripción", t.description, "textarea");
+    moveFields(advancedGrid, [
+      type,
+      estimate,
+      start,
+      hard,
+      boss,
+      impact,
+      manual,
+      origin,
+      requester,
+      tags,
+      next,
+    ]);
+    moveFields(followGrid, [waiting, waitingPerson, follow]);
+    advanced.append(description.closest("label"));
+    status.addEventListener("change", () => {
+      if (status.value === "En espera") followUp.open = true;
+    });
+    dialog.append(advanced, followUp);
     const dependencies = h("details");
     dependencies.append(h("summary", "Dependencias"));
     const depFields = tasks
@@ -691,9 +771,9 @@
         a.id,
         check(dependencies, a.text, (t.dependencies || []).includes(a.id)),
       ]);
-    dialog.append(dependencies);
+    advanced.append(dependencies);
     const score = E.priority(t, tasks, workState.settings);
-    dialog.append(
+    advanced.append(
       h(
         "p",
         `Prioridad automática: ${score.score}/100 · ${Object.entries(
@@ -706,8 +786,8 @@
           .join(" · ")}`,
       ),
     );
-    dialog.append(
-      row(
+    const taskActions = row(
+      primary(
         button("Guardar resumen", () => {
           const deps = depFields.filter(([, c]) => c.checked).map(([id]) => id);
           const reaches = (id, seen = new Set()) => {
@@ -767,38 +847,43 @@
           save();
           taskDetail(id);
         }),
-        button(t.completed ? "Reabrir" : "Completar", () => {
-          complete(id);
-          taskDetail(id);
-        }),
-        button(t.archived ? "Recuperar" : "Archivar", () => {
-          t.archived = !t.archived;
-          if (!t.archived) t.deletedAt = null;
-          history(t, t.archived ? "Archivada" : "Recuperada");
-          save();
-          taskDetail(id);
-        }),
-        button("Duplicar", () => {
-          const copy = E.task({
-            ...structuredClone(t),
-            id: uid(),
-            text: t.text + " (copia)",
-            completed: false,
-            status: "Pendiente",
-            actual: 0,
-            remaining: t.estimated,
-            createdAt: now(),
-            history: [],
-            comments: [],
-            archived: false,
-          });
-          tasks.push(copy);
-          save();
-          taskDetail(copy.id);
-        }),
       ),
+      button(t.completed ? "Reabrir" : "Completar", () => {
+        complete(id);
+        taskDetail(id);
+      }),
+      button(t.archived ? "Recuperar" : "Archivar", () => {
+        t.archived = !t.archived;
+        if (!t.archived) t.deletedAt = null;
+        history(t, t.archived ? "Archivada" : "Recuperada");
+        save();
+        taskDetail(id);
+      }),
+      button("Duplicar", () => {
+        const copy = E.task({
+          ...structuredClone(t),
+          id: uid(),
+          text: t.text + " (copia)",
+          completed: false,
+          status: "Pendiente",
+          actual: 0,
+          remaining: t.estimated,
+          createdAt: now(),
+          history: [],
+          comments: [],
+          archived: false,
+        });
+        tasks.push(copy);
+        save();
+        taskDetail(copy.id);
+      }),
     );
-    dialog.append(
+    taskActions.classList.add("task-main-actions");
+    top.after(taskActions);
+    const more = disclosure("Más acciones");
+    dialog.append(more);
+    more.append(...[...taskActions.children].slice(2));
+    more.append(
       button("Eliminar tarea", () => {
         if (
           !confirm(
@@ -820,8 +905,11 @@
         dialog.close();
       }),
     );
-    const sub = field(dialog, "Nueva subtarea");
-    dialog.append(
+    const subtasks = disclosure("Subtareas"),
+      time = disclosure("Tiempo y sesiones");
+    dialog.append(subtasks, time);
+    const sub = field(subtasks, "Nueva subtarea");
+    subtasks.append(
       button("Crear subtarea", () => {
         const child = E.task({
           id: uid(),
@@ -835,9 +923,9 @@
       }),
     );
     for (const child of tasks.filter((a) => a.parentId === id))
-      dialog.append(button(child.text, () => taskDetail(child.id)));
-    const manualTime = number(dialog, "Registrar minutos realizados", 15, 1);
-    dialog.append(
+      subtasks.append(button(child.text, () => taskDetail(child.id)));
+    const manualTime = number(time, "Registrar minutos realizados", 15, 1);
+    time.append(
       button("Registrar tiempo", () => {
         const n = num(manualTime);
         t.actual += n;
@@ -853,9 +941,9 @@
         taskDetail(id);
       }),
     );
-    dialog.append(h("p", `Tiempo realizado: ${Math.round(t.actual)} min`));
+    time.append(h("p", `Tiempo realizado: ${Math.round(t.actual)} min`));
     for (const s of workState.sessions.filter((s) => s.taskId === id))
-      dialog.append(h("p", `${dateLabel(s.start)} · ${s.status}`));
+      time.append(h("p", `${dateLabel(s.start)} · ${s.status}`));
     common(t, dialog);
   }
   globalThis.openWorkTask = taskDetail;
@@ -876,7 +964,7 @@
     );
   }
   function projectDetail(p) {
-    open(p.text || "Nuevo proyecto");
+    open(p.text || "Nuevo proyecto", p.id);
     const form = h("div", undefined, "work-grid");
     dialog.append(form);
     const title = field(form, "Nombre", p.text),
@@ -901,26 +989,31 @@
     const goal = field(dialog, "Objetivo", p.goal, "textarea"),
       description = field(dialog, "Descripción", p.description, "textarea"),
       next = field(dialog, "Próximos pasos", p.nextStep, "textarea");
+    const projectDetails = disclosure("Más detalles del proyecto");
+    moveFields(projectDetails, [start, priority, manual, description, next]);
+    dialog.append(projectDetails);
     dialog.append(
-      button("Guardar proyecto", () => {
-        Object.assign(p, {
-          text: required(title.value, "El nombre"),
-          status: status.value,
-          due: due.value,
-          start: start.value,
-          priority: num(priority),
-          manualProgress: manual.value === "" ? null : num(manual),
-          goal: goal.value,
-          description: description.value,
-          nextStep: next.value,
-        });
-        if (!workState.projects.includes(p)) workState.projects.push(p);
-        for (const t of tasks.filter((t) => t.projectId === p.id))
-          t.projectPriority = p.priority;
-        history(p, "Proyecto actualizado");
-        save();
-        projectDetail(p);
-      }),
+      primary(
+        button("Guardar proyecto", () => {
+          Object.assign(p, {
+            text: required(title.value, "El nombre"),
+            status: status.value,
+            due: due.value,
+            start: start.value,
+            priority: num(priority),
+            manualProgress: manual.value === "" ? null : num(manual),
+            goal: goal.value,
+            description: description.value,
+            nextStep: next.value,
+          });
+          if (!workState.projects.includes(p)) workState.projects.push(p);
+          for (const t of tasks.filter((t) => t.projectId === p.id))
+            t.projectPriority = p.priority;
+          history(p, "Proyecto actualizado");
+          save();
+          projectDetail(p);
+        }),
+      ),
     );
     dialog.append(h("p", `Progreso: ${progress(p)}%`));
     for (const t of tasks.filter((t) => t.projectId === p.id))
@@ -965,7 +1058,7 @@
     common(p, dialog);
   }
   function recurrenceDetail(r) {
-    open(r.text || "Nueva recurrencia");
+    open(r.text || "Nueva recurrencia", r.id);
     const grid = h("div", undefined, "work-grid");
     dialog.append(grid);
     const title = field(grid, "Nombre", r.text),
@@ -994,6 +1087,17 @@
       ),
       last = check(grid, "Último día laborable del mes", r.lastWorkday),
       active = check(grid, "Activa", r.active !== false);
+    const recurrenceDetails = disclosure("Más opciones de la repetición");
+    moveFields(recurrenceDetails, [end, offset, project, active]);
+    dialog.append(recurrenceDetails);
+    const updateFrequency = () => {
+      weekdays.closest("label").hidden = frequency.value !== "Semanal";
+      month.closest("label").hidden = frequency.value !== "Mensual";
+      last.closest("label").hidden = frequency.value !== "Mensual";
+      interval.closest("label").hidden = frequency.value !== "Personalizada";
+    };
+    frequency.addEventListener("change", updateFrequency);
+    updateFrequency();
     dialog.append(
       button("Guardar plantilla", () => {
         const days = weekdays.value.split(",").map(Number);
@@ -1066,7 +1170,7 @@
         ),
         h(
           "small",
-          `${s.kind === "quick" ? "Tareas rápidas" : "Concentración"} · ${s.status}${s.locked ? " · Fijada" : ""}`,
+          `${s.kind === "quick" ? "Tareas rápidas" : "Concentración"}${s.status === "running" ? " · En curso" : s.status === "paused" ? " · En pausa" : s.status === "done" ? " · Realizada" : ""}${s.locked ? " · Fijada" : ""}`,
         ),
       );
     r.classList.add("session", s.kind || "focus");
@@ -1131,6 +1235,22 @@
             "Tiempo previsto superado. Revisa las siguientes sesiones.",
           ),
         );
+    }
+    if (!preview && !["done", "cancelled"].includes(s.status)) {
+      const actions = [...r.children]
+          .filter((x) => x.tagName === "BUTTON")
+          .slice(1),
+        more = disclosure("Opciones de la sesión");
+      for (const control of actions) {
+        if (["Iniciar", "Reanudar", "Pausar"].includes(control.textContent))
+          primary(control);
+        else if (
+          control.textContent !== "Finalizar sesión" ||
+          s.status === "accepted"
+        )
+          more.append(control);
+      }
+      r.append(more);
     }
     return r;
   }
@@ -1468,10 +1588,17 @@
       writeLocalSnapshot();
       queueCloudSync();
     }
-    panel.append(
+    const overview = h("section", undefined, "today-overview");
+    const heading = h("div", undefined, "today-heading");
+    const greeting = h("div");
+    greeting.append(
+      h("h2", "Un día con foco"),
       h("p", "Tu jornada, con espacio para lo importante.", "work-subtitle"),
     );
-    const date = field(panel, "Día de planificación", selectedDay, "date");
+    heading.append(greeting);
+    overview.append(heading);
+    panel.append(overview);
+    const date = field(heading, "Día de planificación", selectedDay, "date");
     date.addEventListener("change", () => {
       if (date.value) {
         selectedDay = date.value;
@@ -1481,49 +1608,65 @@
     const pending = tasks.filter(
       (t) => !t.completed && !t.archived && !["Cancelada"].includes(t.status),
     );
-    panel.append(
-      row(
-        h("p", `${pending.length} pendientes`, "metric"),
-        h(
-          "p",
-          `${pending.filter((t) => t.due && t.due < selectedDay).length} vencidas`,
-          "metric",
-        ),
-        h(
-          "p",
-          `${workState.projects.filter((p) => p.status === "En curso").length} proyectos activos`,
-          "metric",
-        ),
+    const metric = (value, label) => {
+      const item = h("div", undefined, "metric");
+      item.append(h("strong", String(value)), h("span", label));
+      return item;
+    };
+    const metrics = row(
+      metric(pending.length, "Tareas pendientes"),
+      metric(
+        pending.filter((t) => t.due && t.due < selectedDay).length,
+        "Fuera de plazo",
+      ),
+      metric(
+        workState.projects.filter((p) => p.status === "En curso").length,
+        "Proyectos en curso",
       ),
     );
-    panel.append(
-      row(
-        button("Generar planificación", () => proposal()),
-        button("Regenerar", () => proposal()),
-        button("Replanificar pendientes", () => proposal(1, true)),
-        button("Urgencia: usar margen libre", () => proposal(1, true, true)),
-        button("Editar manualmente", () => editSession()),
-      ),
+    metrics.classList.add("today-metrics");
+    overview.append(metrics);
+    const recent = [...workState.proposals]
+      .reverse()
+      .find((p) => p.from === selectedDay && p.status === "proposed");
+    const actions = row();
+    actions.classList.add("today-actions");
+    const more = disclosure("Ajustar mi día");
+    const generate = button("Generar planificación", () => proposal());
+    if (recent) {
+      actions.append(
+        primary(
+          button("Revisar propuesta pendiente", () => showProposal(recent)),
+        ),
+      );
+      more.append(generate);
+    } else actions.append(primary(generate));
+    more.append(
+      button("Regenerar", () => proposal()),
+      button("Replanificar pendientes", () => proposal(1, true)),
+      button("Urgencia: usar margen libre", () => proposal(1, true, true)),
+      button("Editar manualmente", () => editSession()),
     );
+    actions.append(more);
+    overview.append(actions);
     const reserve = E.availability(
       selectedDay,
       workState.settings,
       meetingCalendar?.meetings || [],
       workState.sessions,
     ).reduce((n, [a, b]) => n + (b - a) / 60000, 0);
-    panel.append(
+    overview.append(
       h(
         "p",
-        `${Math.round(reserve)} min sin asignar · La agenda permanece estable hasta que aceptes otra propuesta.`,
+        `${Math.round(reserve)} min disponibles · Tú decides cuándo aceptar una nueva planificación.`,
+        "today-hint",
       ),
     );
-    const recent = [...workState.proposals]
-      .reverse()
-      .find((p) => p.from === selectedDay && p.status === "proposed");
-    if (recent)
-      panel.append(
-        button("Revisar propuesta pendiente", () => showProposal(recent)),
-      );
+    const columns = h("div", undefined, "today-columns");
+    const agenda = h("section", undefined, "today-agenda");
+    const priorities = h("section", undefined, "today-priorities");
+    columns.append(agenda, priorities);
+    panel.append(columns);
     const items = [
       ...workState.sessions.filter(
         (s) =>
@@ -1554,10 +1697,14 @@
             "work-error",
           ),
         );
-    panel.append(h("h3", "Agenda aceptada"));
+    agenda.append(h("h3", "Tu agenda"));
     if (!items.length)
-      panel.append(
-        h("p", "Todavía no hay sesiones. Genera y revisa una propuesta."),
+      agenda.append(
+        h(
+          "p",
+          "Tu agenda está despejada. Genera una planificación para reservar tiempo a tus tareas.",
+          "empty-state",
+        ),
       );
     let batchId = null,
       batchContainer = null;
@@ -1567,12 +1714,12 @@
           batchId = item.batchId;
           batchContainer = h("section", undefined, "quick-batch");
           batchContainer.append(h("h4", "Bloque de tareas rápidas"));
-          panel.append(batchContainer);
+          agenda.append(batchContainer);
         }
         batchContainer.append(sessionRow(item));
       } else {
         batchId = null;
-        panel.append(
+        agenda.append(
           item.meeting
             ? h(
                 "p",
@@ -1583,24 +1730,40 @@
         );
       }
     }
-    panel.append(h("h3", "Prioridades y seguimiento"));
+    priorities.append(h("h3", "Para avanzar hoy"));
+    if (!pending.length)
+      priorities.append(
+        h(
+          "p",
+          "Todo al día. Añade una tarea cuando tengas algo nuevo entre manos.",
+          "empty-state",
+        ),
+      );
     for (const t of pending
       .sort(
         (a, b) =>
           E.priority(b, tasks, workState.settings).score -
           E.priority(a, tasks, workState.settings).score,
       )
-      .slice(0, 8))
-      panel.append(taskRow(t));
+      .slice(0, 5))
+      priorities.append(taskRow(t));
   }
   function taskRow(t) {
-    const p = E.priority(t, tasks, workState.settings);
+    const completeButton = button(
+      t.completed ? "✓" : "○",
+      () => complete(t.id),
+      "task-complete-control",
+    );
+    completeButton.setAttribute(
+      "aria-label",
+      `${t.completed ? "Reabrir" : "Completar"} ${t.text}`,
+    );
     return row(
-      button(t.completed ? "✓" : "○", () => complete(t.id)),
+      completeButton,
       button(t.text, () => taskDetail(t.id), "work-task-title"),
       h(
         "small",
-        `${t.status} · ${Math.round(t.remaining)} min · ${p.score}/100${t.due ? " · " + t.due : ""}${t.followUp ? " · Seguimiento " + t.followUp : ""}`,
+        `${Math.round(t.remaining)} min${t.due ? " · Vence " + new Intl.DateTimeFormat("es", { day: "numeric", month: "short" }).format(new Date(t.due + "T12:00:00")) : ""}${t.status === "En espera" ? " · En espera" : ""}`,
       ),
     );
   }
@@ -1669,6 +1832,51 @@
       "Extensiones admitidas (separadas por comas)",
       s.extensions.join(","),
     );
+    const schedule = disclosure("Descansos, festivos y zona horaria"),
+      planning = disclosure("Preferencias de planificación"),
+      scoring = disclosure("Criterios de prioridad"),
+      files = disclosure("Archivos");
+    for (const section of [schedule, planning, scoring, files]) {
+      const content = h("div", undefined, "work-grid");
+      section.append(content);
+      section.content = content;
+      panel.append(section);
+    }
+    moveFields(schedule.content, [zone, holidays, breaks]);
+    moveFields(planning.content, [
+      focusStart,
+      focusEnd,
+      focus,
+      quick,
+      reserve,
+      session,
+      minimum,
+      limit,
+    ]);
+    moveFields(files.content, [maxfile, extensions]);
+    weekdays.closest("label").hidden = true;
+    const days = h("fieldset", undefined, "weekday-picker");
+    days.append(h("legend", "Días de trabajo"));
+    form.append(days);
+    const dayInputs = [
+      ["Lun", 1],
+      ["Mar", 2],
+      ["Mié", 3],
+      ["Jue", 4],
+      ["Vie", 5],
+      ["Sáb", 6],
+      ["Dom", 0],
+    ].map(([label, value]) => {
+      const control = check(days, label, s.weekdays.includes(value));
+      return [control, value];
+    });
+    for (const [control] of dayInputs)
+      control.addEventListener("change", () => {
+        weekdays.value = dayInputs
+          .filter(([c]) => c.checked)
+          .map(([, v]) => v)
+          .join(",");
+      });
     const urgency = {};
     for (const [key, label] of Object.entries({
       overdue: "Vencida",
@@ -1677,7 +1885,13 @@
       soon: "2–3 días laborables",
       week: "4–5 días laborables",
     }))
-      urgency[key] = number(form, `Urgencia: ${label}`, s.urgency[key], 0, 40);
+      urgency[key] = number(
+        scoring.content,
+        `Urgencia: ${label}`,
+        s.urgency[key],
+        0,
+        40,
+      );
     const weights = {};
     for (const [key, label] of Object.entries({
       deadline: "Vencimiento",
@@ -1686,7 +1900,13 @@
       dependencies: "Dependencias",
       age: "Antigüedad",
     }))
-      weights[key] = number(form, `Peso: ${label}`, s.weights[key], 0, 100);
+      weights[key] = number(
+        scoring.content,
+        `Peso: ${label}`,
+        s.weights[key],
+        0,
+        100,
+      );
     panel.append(
       button("Guardar configuración", () => {
         const wd = weekdays.value.split(",").map(Number);
@@ -1867,7 +2087,9 @@
       filter = select.value;
       renderTaskFilters();
     });
-    const sort = field(bar, "Orden", sortBy, "text", [
+    const filters = disclosure("Ordenar y agrupar");
+    bar.append(filters);
+    const sort = field(filters, "Orden", sortBy, "text", [
       "Prioridad",
       "Vencimiento",
       "Duración",
@@ -1877,7 +2099,7 @@
       sortBy = sort.value;
       renderTaskFilters();
     });
-    const group = field(bar, "Agrupar", groupBy, "text", [
+    const group = field(filters, "Agrupar", groupBy, "text", [
       "Sin agrupar",
       "Proyecto",
       "Estado",
@@ -1888,6 +2110,16 @@
       renderTaskFilters();
     });
     bar.append(
+      button(selecting ? "Terminar selección" : "Seleccionar varias", () => {
+        selecting = !selecting;
+        if (!selecting) selectedTasks.clear();
+        renderTaskFilters();
+      }),
+    );
+    const bulk = row();
+    bulk.hidden = !selecting;
+    bar.append(bulk);
+    bulk.append(
       button("Completar seleccionadas", () => {
         for (const id of selectedTasks) {
           const t = tasks.find((x) => x.id === id);
@@ -1965,6 +2197,7 @@
       select.addEventListener("change", () =>
         select.checked ? selectedTasks.add(t.id) : selectedTasks.delete(t.id),
       );
+      select.hidden = !selecting;
       line.prepend(select);
       li.append(line);
       list.append(li);
@@ -1991,6 +2224,7 @@
       recurrences: "Recurrentes",
       settings: "Configuración",
     }[v];
+    document.title = `${pageTitle.textContent} — Planificador`;
     document
       .querySelectorAll(".view-button")
       .forEach((b) =>
@@ -1998,11 +2232,13 @@
       );
     renderWork();
   }
-  document
-    .querySelectorAll("[data-work-view]")
-    .forEach((b) =>
-      b.addEventListener("click", () => show(b.dataset.workView)),
-    );
+  globalThis.openWorkHome = () => show("today");
+  document.querySelectorAll("[data-work-view]").forEach((b) =>
+    b.addEventListener("click", () => {
+      optionsMenu.open = false;
+      show(b.dataset.workView);
+    }),
+  );
   $("#work-search").addEventListener("input", () => {
     setPlannerView("tasks");
     renderTaskFilters();
@@ -2128,7 +2364,9 @@
             E.dateAt(e.at, workState.settings.timezone) <= end,
         )
         .reduce((n, e) => n + e.minutes, 0);
-    const report = h("section");
+    const report = disclosure(
+      calendarView === "month" ? "Resumen del mes" : "Resumen de la semana",
+    );
     report.append(
       h("h3", calendarView === "month" ? "Resumen mensual" : "Resumen semanal"),
     );

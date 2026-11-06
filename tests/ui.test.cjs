@@ -39,7 +39,7 @@ function app() {
       ? w.document.querySelector("#work-dialog")
       : w.document;
     const b = [...scope.querySelectorAll("button")].find(
-      (b) => b.textContent === text,
+      (b) => b.textContent.trim() === text,
     );
     assert.ok(b, "Button " + text);
     b.click();
@@ -231,6 +231,159 @@ test("accepting a future proposal creates stable sessions and preserves the prop
     const before = run("JSON.stringify(workState.sessions)");
     click("Regenerar");
     assert.equal(run("JSON.stringify(workState.sessions)"), before);
+  } finally {
+    dom.window.close();
+  }
+});
+function exposed(node) {
+  for (let p = node; p; p = p.parentElement) {
+    if (p.hidden) return false;
+    if (
+      p.tagName === "DETAILS" &&
+      !p.open &&
+      !p.querySelector("summary")?.contains(node)
+    )
+      return false;
+  }
+  return true;
+}
+test("quick capture exposes three fields, closes by default and allows consecutive entry", () => {
+  const { dom, w, run, click, input } = app();
+  try {
+    click("+ Nueva tarea");
+    const dialog = w.document.querySelector("#work-dialog");
+    assert.equal(
+      [...dialog.querySelectorAll("input,select")].filter(exposed).length,
+      3,
+    );
+    input("Título", "Una petición");
+    dialog
+      .querySelector("form")
+      .dispatchEvent(
+        new w.Event("submit", { bubbles: true, cancelable: true }),
+      );
+    assert.equal(dialog.open, false);
+    assert.equal(run("tasks.length"), 1);
+    click("+ Nueva tarea");
+    dialog.querySelector("details").open = true;
+    const another = [...dialog.querySelectorAll("label")]
+      .find((x) => x.firstChild.textContent === "Crear otra después")
+      .querySelector("input");
+    another.checked = true;
+    input("Título", "Segunda petición");
+    dialog
+      .querySelector("form")
+      .dispatchEvent(
+        new w.Event("submit", { bubbles: true, cancelable: true }),
+      );
+    assert.equal(dialog.open, true);
+    assert.equal(run("tasks.length"), 2);
+  } finally {
+    dom.window.close();
+  }
+});
+test("task detail keeps five fields visible and preserves advanced values on save", () => {
+  const { dom, w, run, click, input } = app();
+  try {
+    run(
+      `tasks=[WorkEngine.task({id:'t',text:'Revisar cierre',impact:5,boss:true,estimated:90,remaining:60,waitingPerson:'Equipo',tags:['cierre']})];`,
+    );
+    w.openWorkTask("t");
+    const dialog = w.document.querySelector("#work-dialog");
+    assert.equal(
+      [...dialog.querySelectorAll("input,select,textarea")].filter(exposed)
+        .length,
+      5,
+    );
+    input("Título", "Revisar cierre mensual");
+    click("Guardar resumen");
+    assert.equal(run("tasks[0].text"), "Revisar cierre mensual");
+    assert.equal(run("tasks[0].estimated"), 90);
+    assert.equal(run("tasks[0].impact"), 5);
+    assert.equal(run("tasks[0].waitingPerson"), "Equipo");
+    assert.equal(run("tasks[0].boss"), true);
+    const advanced = [...dialog.querySelectorAll("details")].find(
+      (x) =>
+        x.querySelector("summary")?.textContent === "Más detalles y prioridad",
+    );
+    advanced.open = true;
+    click("Guardar resumen");
+    assert.equal(
+      [...dialog.querySelectorAll("details")].find(
+        (x) =>
+          x.querySelector("summary")?.textContent ===
+          "Más detalles y prioridad",
+      ).open,
+      true,
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+test("home has a single primary action and calendar switches stay inside the calendar", () => {
+  const { dom, w, run, click } = app();
+  try {
+    run(`tasks=[WorkEngine.task({id:'t',text:'Revisar',remaining:30})];`);
+    w.openWorkHome();
+    assert.equal(w.document.querySelector("#page-title").textContent, "Hoy");
+    assert.equal(
+      w.document.querySelectorAll("#work-view .today-actions > .primary-action")
+        .length,
+      1,
+    );
+    assert.equal(
+      w.document.querySelector(".view-navigation [data-work-view=settings]"),
+      null,
+    );
+    assert.equal(
+      w.document.querySelector(".view-navigation [data-planner-view=month]"),
+      null,
+    );
+    assert.ok(
+      w.document.querySelector("#options-menu [data-work-view=settings]"),
+    );
+    click("Calendario");
+    click("Mes");
+    assert.equal(
+      w.document
+        .querySelector(".view-navigation [data-planner-view=week]")
+        .getAttribute("aria-pressed"),
+      "true",
+    );
+    click("Tareas");
+    assert.ok(w.document.querySelector("#work-task-filters"));
+    assert.ok(
+      [...w.document.querySelectorAll("#task-list input[type=checkbox]")].every(
+        (x) => x.hidden,
+      ),
+    );
+    click("Seleccionar varias");
+    assert.ok(
+      [...w.document.querySelectorAll("#task-list input[type=checkbox]")].every(
+        (x) => !x.hidden,
+      ),
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+test("settings uses weekday names and preserves scoring when saving basic hours", () => {
+  const { dom, w, run, click } = app();
+  try {
+    click("Configuración");
+    const form = w.document.querySelector("#work-view"),
+      find = (label) =>
+        [...form.querySelectorAll("label")]
+          .find((x) => x.firstChild.textContent === label)
+          .querySelector("input,select");
+    find("Inicio habitual").value = "09:00";
+    const sat = find("Sáb");
+    sat.checked = true;
+    sat.dispatchEvent(new w.Event("change"));
+    click("Guardar configuración");
+    assert.equal(run("workState.settings.start"), "09:00");
+    assert.equal(run("workState.settings.weekdays.includes(6)"), true);
+    assert.equal(run("workState.settings.weights.deadline"), 40);
   } finally {
     dom.window.close();
   }
