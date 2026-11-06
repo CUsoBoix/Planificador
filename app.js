@@ -403,16 +403,18 @@ function setPlannerView(view) {
   globalThis.hideWork?.();
   tasksView.hidden = view !== "tasks";
   calendarViewSection.hidden = view === "tasks";
-  pageTitle.textContent = view === "tasks" ? "Tareas" : view === "week" ? "Semana" : "Mes";
+  pageTitle.textContent = view === "tasks" ? "Tareas" : "Calendario";
   document.title = `${pageTitle.textContent} — Planificador`;
 
   for (const button of plannerViewButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.plannerView === view));
+    button.setAttribute("aria-pressed", String(button.dataset.plannerView === view || (button.closest(".view-navigation") && view === "month" && button.dataset.plannerView === "week")));
   }
 
   if (view !== "tasks") {
     calendarView = view;
     renderCalendar();
+  } else {
+    globalThis.renderWork?.();
   }
 }
 
@@ -782,6 +784,7 @@ async function activateCloudSession(session) {
     plannerOptions.hidden = false;
     plannerContent.hidden = false;
     render();
+    globalThis.openWorkHome?.();
 
     if (!saved) {
       await persistCloudState();

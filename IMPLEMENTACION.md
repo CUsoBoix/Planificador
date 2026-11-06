@@ -55,7 +55,7 @@ Node 24 se usa en las pruebas de la función TypeScript. El sitio publicado no n
 
 Para probar el login desde una URL distinta de la de producción, esa URL debe estar autorizada en Supabase Auth. La configuración GitHub existente no se ha cambiado.
 
-La acción de GitHub Pages ejecuta instalación, pruebas y empaquetado antes de publicar `dist/`. El frontend se entrega en una rama de trabajo y una PR en borrador de GitHub. No se ha ejecutado la publicación de Pages.
+La acción de GitHub Pages ejecuta instalación, pruebas y empaquetado antes de publicar `dist/`. La primera versión se publicó en GitHub Pages mediante la PR #1. Las mejoras de experiencia se documentan en `DISENO.md`.
 
 ## Verificación y límites
 
@@ -63,7 +63,7 @@ Se ejecutan pruebas de motor, interfaz DOM, persistencia de snapshots, combinaci
 
 Se verificaron en Supabase la columna nueva, el bucket privado, la ausencia de permisos anónimos de escritura y la ausencia de políticas de subida directa. El asesor de seguridad no detectó nuevos problemas de RLS; mantiene un aviso preexistente de protección de contraseñas filtradas desactivada, aunque esta aplicación usa GitHub: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
-No se ha realizado una prueba visual en un navegador real ni una subida/descarga de extremo a extremo con la sesión GitHub del usuario. Las pruebas DOM y los dobles de servidor no sustituyen esa validación final.
+Se ha realizado una revisión visual en Chromium real con datos locales controlados; véase `DISENO.md`. Sigue pendiente la subida/descarga de extremo a extremo con la sesión GitHub real del usuario.
 
 Límites técnicos y comprobaciones pendientes:
 
@@ -75,4 +75,4 @@ Límites técnicos y comprobaciones pendientes:
 - El límite de carga es 50 MB y puede reducirse desde configuración. Aumentarlo requiere ajustar también el límite del bucket y de la función.
 - Los cambios simultáneos de planificación incompatibles pueden ser rechazados por la validación de solapamientos del servidor; requieren revisar y replanificar. No hay una pantalla específica de resolución de conflictos.
 - El borrado de tareas es recuperable desde Archivadas y conserva historial. No hay eliminación física de fichas ni recolector automático de archivos huérfanos.
-- Queda pendiente la validación visual y el flujo completo con una sesión real del usuario, además de publicar el frontend. Por ello no se presenta esta entrega como una aceptación de producción cerrada.
+- Queda pendiente el flujo completo con una sesión real del usuario. La revisión visual local y las pruebas automatizadas no sustituyen esa validación.
