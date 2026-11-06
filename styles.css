@@ -810,3 +810,42 @@ button:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+/* Work management: retains Inter and the existing restrained palette. */
+.planner { max-width: 1180px; }
+.work-toolbar,.work-row { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0; }
+.work-toolbar input[type=search] {flex:1;min-width:220px;}
+.work-row {padding:12px 0;border-bottom:1px solid #e7e8ec;}
+.work-row small {color:#626974;font-size:12px;}
+.work-task-title {flex:1;text-align:left;min-width:180px;font-weight:550;}
+#work-view {padding-top:24px;}
+.work-subtitle {color:#6b7280;margin-bottom:24px;}
+.work-field {display:flex;flex-direction:column;gap:7px;font-size:12px;color:#56616d;margin:12px 0;flex:1;}
+.work-field:has(input[type=checkbox]) {flex-direction:row;align-items:center;}
+.work-field input,.work-field select,.work-field textarea,.work-toolbar input {border:1px solid #d9dee4;border-radius:7px;padding:10px 12px;background:#fff;color:#18212b;font:inherit;min-width:0;}
+.work-field textarea {resize:vertical;min-height:90px;font-family:monospace;line-height:1.65;}
+.work-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px;}
+#work-view button,#work-dialog button,.work-toolbar button,#work-task-filters button,#work-calendar-agenda button,#task-list button:not(.task-check):not(.delete-button) {border:1px solid #d9dee4;border-radius:6px;padding:9px 12px;background:white;color:#243242;font:inherit;cursor:pointer;}
+#new-work-task {background:#202c3a;color:#fff;}
+button:hover {filter:brightness(.96);} button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible {outline:2px solid #365c83;outline-offset:3px;}
+#work-dialog {width:min(840px,92vw);max-height:90vh;border:1px solid #dce0e5;border-radius:14px;padding:28px;color:#18212b;box-shadow:0 24px 80px #0003;}
+#work-dialog::backdrop {background:#172a3d66;}
+#work-dialog details {border-top:1px solid #e1e5e8;padding:16px 0;}
+#work-dialog summary {cursor:pointer;font-weight:600;}
+#work-dialog h2 {flex:1;font-size:23px;}
+.metric {padding:20px;background:#f4f6f8;border:1px solid #e5e9ee;border-radius:10px;flex:1;font-weight:600;}
+.session {border-left:3px solid #5d7198;padding-left:14px;background:#f8f9fc;border-radius:5px;}
+.session.quick {border-left-color:#8d7740;background:#fcfaf5;}
+.meeting-block {padding:18px;border-left:3px solid #5e8577;background:#f3f8f5;}
+.work-error {color:#a73232;padding:12px;background:#fff5f5;border-radius:6px;}
+.work-notice {color:#426453;font-size:13px;}
+.work-calendar-label {display:block;font-size:11px;color:#5b6680;white-space:normal;margin-top:5px;}
+.view-navigation {flex-wrap:wrap;}
+@media(max-width:640px){.work-grid{grid-template-columns:1fr;}#work-dialog{padding:16px;}.work-row{align-items:stretch;}.metric{min-width:100px;}.view-navigation{gap:4px;}}
+.quick-batch {padding:12px 18px;border:1px solid #e8dfc8;border-radius:10px;background:#fdfbf6;margin:14px 0;}
+.quick-batch h4 {font-size:13px;color:#78653d;margin:0 0 10px;}
+.work-day-off {background:#f4f4f4;}
+.document-preview {line-height:1.7;overflow:auto;}.document-preview img {max-width:100%;height:auto;}
+#work-calendar-agenda table {width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;}
+#work-calendar-agenda th,#work-calendar-agenda td {padding:10px;border-bottom:1px solid #e2e5e8;text-align:left;}
+.file-drop {border:1px dashed #aab4c0;border-radius:8px;padding:20px;text-align:center;color:#64748b;margin:12px 0;}
+#work-dialog progress {width:100%;height:8px;}
