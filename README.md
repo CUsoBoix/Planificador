@@ -40,3 +40,14 @@ Para activar el servicio:
 La clave publishable está diseñada para aparecer en una app web. La seguridad depende de la política RLS del SQL; nunca uses la clave `service_role` en el navegador.
 
 El cliente web incluido en `assets/vendor` es `@supabase/supabase-js` 2.119.0, con licencia MIT en `assets/vendor/supabase.LICENSE`.
+
+## Gestión de trabajo y planificación
+
+La ampliación incorpora Hoy, Proyectos, Recurrentes, configuración de jornada, fichas documentadas y propuestas de agenda. Consulta [IMPLEMENTACION.md](IMPLEMENTACION.md) para instalación, migración, pruebas, seguridad y límites verificados.
+
+```sh
+npm ci
+npm test
+npm run build
+python3 -m http.server 8000 --directory dist
+```

@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "fflate": "0.8.2",
+    "jsdom": "26.1.0",
+    "prettier": "3.6.2"
+  },
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check app.js && node --check work-engine.js && node --check work-ui.js && node --check file-rules.js",
+    "build": "npm run check && node scripts/build.cjs"
+  }
+}

@@ -11,7 +11,12 @@
     <script src="./assets/vendor/ical.min.js" defer></script>
     <script src="./assets/vendor/supabase.min.js" defer></script>
     <script src="./cloud-config.js" defer></script>
+    <script src="./assets/vendor/marked.min.js" defer></script>
+    <script src="./assets/vendor/purify.min.js" defer></script>
+    <script src="./file-rules.js" defer></script>
+    <script src="./work-engine.js" defer></script>
     <script src="./app.js" defer></script>
+    <script src="./work-ui.js" defer></script>
   </head>
   <body>
     <main class="planner" aria-labelledby="page-title">
@@ -34,7 +39,7 @@
               <button class="options-action" id="import-calendar" type="button">Importar .ics</button>
               <input id="calendar-input" type="file" accept=".ics,text/calendar" hidden />
               <button class="options-action" id="remove-calendar" type="button" hidden>Quitar calendario</button>
-              <button class="options-action" id="clear-completed" type="button" hidden>Borrar tareas completadas</button>
+              <button class="options-action" id="clear-completed" type="button" hidden>Archivar tareas completadas</button>
               <button class="options-action is-destructive" id="reset-all" type="button">Restablecer todo</button>
             </div>
           </div>
@@ -44,12 +49,15 @@
       <div id="planner-content" hidden>
         <div class="planner-controls">
           <nav class="view-navigation" aria-label="Vistas del planificador">
+            <button class="view-button" data-work-view="today" type="button">Hoy</button>
             <button class="view-button" data-planner-view="tasks" type="button" aria-pressed="true">Tareas</button>
-            <button class="view-button" data-planner-view="week" type="button" aria-pressed="false">Semana</button>
+            <button class="view-button" data-work-view="projects" type="button">Proyectos</button>
+            <button class="view-button" data-planner-view="week" type="button" aria-pressed="false">Planificación</button>
             <button class="view-button" data-planner-view="month" type="button" aria-pressed="false">Mes</button>
-          </nav>
+          <button class="view-button" data-work-view="recurrences" type="button">Recurrentes</button><button class="view-button" data-work-view="settings" type="button">Configuración</button></nav>
         </div>
 
+        <div class="work-toolbar"><button id="new-work-task" type="button">+ Nueva tarea</button><input id="work-search" type="search" placeholder="Buscar tareas, proyectos y documentación" aria-label="Búsqueda global"></div><section id="work-view" hidden></section>
         <section class="task-view" id="task-view" aria-label="Tareas">
           <div class="planner-toolbar">
             <h2 class="task-count" id="task-count" aria-live="polite">0 tareas pendientes</h2>
@@ -107,5 +115,6 @@
 
       <p class="visually-hidden" id="announcements" aria-live="polite" aria-atomic="true"></p>
     </main>
+  <dialog id="work-dialog" aria-label="Ficha de trabajo"></dialog>
   </body>
 </html>

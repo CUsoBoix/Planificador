@@ -35,6 +35,7 @@ const cloudStatus = document.querySelector("#cloud-status");
 const githubLoginButton = document.querySelector("#github-login");
 const githubLogoutButton = document.querySelector("#github-logout");
 
+let workState = WorkEngine.workspace();
 let tasks = loadTasks();
 let meetingCalendar = loadMeetingCalendar();
 let calendarView = "week";
@@ -69,7 +70,7 @@ function normalizeTasks(saved) {
     && typeof task.id === "string"
     && typeof task.text === "string"
     && typeof task.completed === "boolean"
-  ));
+  )).map(task => WorkEngine.task(task));
 }
 
 function normalizeMeetings(saved) {
@@ -90,6 +91,7 @@ function normalizeMeetings(saved) {
 function saveTasks() {
   try {
     localStorage.setItem(storageKey, JSON.stringify(tasks));
+    if (cloudUser) localStorage.setItem(`planner-work-v2:${cloudUser.id}`, JSON.stringify(workState));
   } catch {
     announcements.textContent = "No se han podido guardar los cambios en este dispositivo.";
   }
@@ -144,7 +146,7 @@ function render() {
   clearCompletedButton.hidden = completed === 0;
   list.replaceChildren();
 
-  for (const task of tasks) {
+  for (const task of tasks.filter(t => !t.archived)) {
     const row = document.createElement("li");
     row.className = `task-item${task.completed ? " is-complete" : ""}`;
 
@@ -156,9 +158,11 @@ function render() {
     if (task.completed) check.append(createIcon("m5 10 3 3 7-7", "0 0 16 16"));
     check.addEventListener("click", () => toggleTask(task.id));
 
-    const text = document.createElement("span");
+    const text = document.createElement("button");
     text.className = "task-text";
     text.textContent = task.text;
+    text.type = "button";
+    text.addEventListener("click", () => globalThis.openWorkTask?.(task.id));
 
     const remove = document.createElement("button");
     remove.className = "delete-button";
@@ -173,6 +177,7 @@ function render() {
   }
 
   renderMeetings();
+  globalThis.renderWork?.();
 }
 
 function formatMeetingTime(meeting) {
@@ -383,6 +388,7 @@ function renderCalendar() {
     meetingList.append(row);
   }
 
+  globalThis.renderWorkCalendar?.(days);
   meetingEmpty.hidden = selectedMeetings.length > 0 || !meetingCalendar;
   if (!meetingCalendar) {
     meetingEmpty.textContent = "";
@@ -394,6 +400,7 @@ function renderCalendar() {
 }
 
 function setPlannerView(view) {
+  globalThis.hideWork?.();
   tasksView.hidden = view !== "tasks";
   calendarViewSection.hidden = view === "tasks";
   pageTitle.textContent = view === "tasks" ? "Tareas" : view === "week" ? "Semana" : "Mes";
@@ -445,6 +452,7 @@ function setCloudStatus(message, state = "info") {
 function writeLocalSnapshot() {
   try {
     localStorage.setItem(storageKey, JSON.stringify(tasks));
+    if (cloudUser) localStorage.setItem(`planner-work-v2:${cloudUser.id}`, JSON.stringify(workState));
     if (meetingCalendar) {
       localStorage.setItem(meetingStorageKey, JSON.stringify(meetingCalendar));
     } else {
@@ -465,6 +473,7 @@ function normalizeCloudCalendar(calendar) {
 function emptyCloudState() {
   return {
     tasks: [],
+    work_state: WorkEngine.workspace(),
     meeting_calendar: { imported: false, meetings: [] },
   };
 }
@@ -472,7 +481,8 @@ function emptyCloudState() {
 function cloneCloudState(state) {
   const calendar = state?.meeting_calendar;
   return {
-    tasks: normalizeTasks(state?.tasks).map((task) => ({ ...task })),
+    tasks: JSON.parse(JSON.stringify(normalizeTasks(state?.tasks))),
+    work_state: WorkEngine.workspace(state?.work_state),
     meeting_calendar: calendar?.imported === true
       ? { imported: true, meetings: normalizeMeetings(calendar.meetings).map((meeting) => ({ ...meeting })) }
       : { imported: false, meetings: [] },
@@ -482,6 +492,7 @@ function cloneCloudState(state) {
 function cloudStateFromRecord(record) {
   return cloneCloudState({
     tasks: record?.tasks,
+    work_state: record?.work_state,
     meeting_calendar: record?.meeting_calendar,
   });
 }
@@ -509,6 +520,7 @@ function saveCloudBase(userId, state) {
 function currentCloudState() {
   return cloneCloudState({
     tasks,
+    work_state: workState,
     meeting_calendar: meetingCalendar
       ? { imported: true, meetings: meetingCalendar.meetings }
       : { imported: false, meetings: [] },
@@ -518,6 +530,7 @@ function currentCloudState() {
 function applyCloudState(state) {
   const normalized = cloneCloudState(state);
   tasks = normalized.tasks;
+  workState = normalized.work_state;
   meetingCalendar = normalized.meeting_calendar.imported
     ? { meetings: normalized.meeting_calendar.meetings }
     : null;
@@ -574,7 +587,10 @@ function mergeCloudItems(baseItems, localItems, remoteItems) {
           const remoteValue = remoteItem[field];
           const localFieldChanged = !sameCloudValue(localValue, baseValue);
           const remoteFieldChanged = !sameCloudValue(remoteValue, baseValue);
-          const value = localFieldChanged ? localValue : remoteValue;
+          const mergeable = [localValue, remoteValue].every(value => Array.isArray(value) && value.every(item => item && typeof item === "object" && typeof item.id === "string"));
+          const value = mergeable && localFieldChanged && remoteFieldChanged
+            ? mergeCloudItems(Array.isArray(baseValue) ? baseValue : [], localValue, remoteValue).items
+            : localFieldChanged ? localValue : remoteValue;
           if (value !== undefined) item[field] = value;
           if (localFieldChanged && remoteFieldChanged && !sameCloudValue(localValue, remoteValue)) {
             conflicts += 1;
@@ -596,6 +612,7 @@ function mergeCloudStates(baseState, localState, remoteState) {
   const local = cloneCloudState(localState);
   const remote = cloneCloudState(remoteState);
   const tasksResult = mergeCloudItems(base.tasks, local.tasks, remote.tasks);
+  const workResult = mergeWorkStates(base.work_state, local.work_state, remote.work_state);
   const meetingsResult = mergeCloudItems(
     base.meeting_calendar.meetings,
     local.meeting_calendar.meetings,
@@ -616,12 +633,13 @@ function mergeCloudStates(baseState, localState, remoteState) {
   return {
     state: {
       tasks: tasksResult.items,
+      work_state: workResult.state,
       meeting_calendar: {
         imported,
         meetings: imported ? meetingsResult.items : [],
       },
     },
-    conflicts: tasksResult.conflicts + meetingsResult.conflicts
+    conflicts: tasksResult.conflicts + meetingsResult.conflicts + workResult.conflicts
       + Number(
         localImportedChanged
         && remoteImportedChanged
@@ -656,7 +674,7 @@ function queueCloudSync() {
 async function reconcileCloudConflict() {
   const { data: saved, error } = await cloudClient
     .from("planner_state")
-    .select("tasks, meeting_calendar, updated_at")
+    .select("tasks, meeting_calendar, work_state, updated_at")
     .eq("user_id", cloudUser.id)
     .maybeSingle();
   if (error) throw error;
@@ -691,7 +709,8 @@ async function persistCloudState() {
   cloudSaving = true;
   setCloudStatus("Sincronizando cambios…", "busy");
   try {
-    const { data, error } = await cloudClient.rpc("save_planner_state", {
+    const { data, error } = await cloudClient.rpc("save_planner_state_v2", {
+      p_work_state: sentState.work_state,
       p_tasks: sentState.tasks,
       p_meeting_calendar: sentState.meeting_calendar,
       p_expected_updated_at: cloudUpdatedAt,
@@ -729,6 +748,7 @@ async function activateCloudSession(session) {
   let cloudNeedsMergeSave = false;
   try {
     cloudUser = user;
+    try { workState = WorkEngine.workspace(JSON.parse(localStorage.getItem(`planner-work-v2:${user.id}`) || "{}")); } catch { workState = WorkEngine.workspace(); }
     githubLoginButton.hidden = true;
     githubLogoutButton.hidden = false;
     plannerOptions.hidden = true;
@@ -736,7 +756,7 @@ async function activateCloudSession(session) {
 
     const { data: saved, error: loadError } = await cloudClient
       .from("planner_state")
-      .select("tasks, meeting_calendar, updated_at")
+      .select("tasks, meeting_calendar, work_state, updated_at")
       .eq("user_id", user.id)
       .maybeSingle();
     if (loadError) throw loadError;
@@ -867,7 +887,7 @@ async function refreshCloudState() {
   try {
     const { data, error } = await cloudClient
       .from("planner_state")
-      .select("tasks, meeting_calendar, updated_at")
+      .select("tasks, meeting_calendar, work_state, updated_at")
       .eq("user_id", cloudUser.id)
       .maybeSingle();
     if (error) throw error;
@@ -928,20 +948,22 @@ function addTask(text) {
     completed: false,
   };
 
-  tasks.push(task);
+  tasks.push(WorkEngine.task(task));
   saveTasks();
   render();
   announcements.textContent = "Tarea añadida.";
 }
 
 function toggleTask(id) {
+  if (globalThis.completeWorkTask) return globalThis.completeWorkTask(id);
   tasks = tasks.map((task) => task.id === id ? { ...task, completed: !task.completed } : task);
   saveTasks();
   render();
 }
 
 function deleteTask(id) {
-  tasks = tasks.filter((task) => task.id !== id);
+  if (!window.confirm("¿Archivar esta tarea? Conservará su documentación y archivos.")) return;
+  tasks = tasks.map(task => task.id === id ? {...task, archived:true} : task);
   saveTasks();
   render();
   announcements.textContent = "Tarea borrada.";
@@ -959,7 +981,7 @@ form.addEventListener("submit", (event) => {
 
 clearCompletedButton.addEventListener("click", () => {
   const removed = tasks.filter((task) => task.completed).length;
-  tasks = tasks.filter((task) => !task.completed);
+  tasks = tasks.map(task => task.completed ? {...task, archived:true} : task);
   saveTasks();
   render();
   announcements.textContent = `${removed} ${removed === 1 ? "tarea completada borrada" : "tareas completadas borradas"}.`;
@@ -972,6 +994,7 @@ resetAllButton.addEventListener("click", () => {
   if (!confirmed) return;
 
   tasks = [];
+  workState = WorkEngine.workspace();
   meetingCalendar = null;
   calendarStatus.textContent = "";
   calendarStatus.hidden = true;
@@ -1120,5 +1143,22 @@ removeCalendarButton.addEventListener("click", () => {
   }
 });
 
+function mergeWorkStates(base, local, remote) {
+  const result = WorkEngine.workspace(remote);
+  let conflicts = 0;
+  for (const key of ['projects','sessions','proposals','recurrences','history']) {
+    const merged = mergeCloudItems(base[key]||[],local[key]||[],remote[key]||[]);
+    result[key] = merged.items;
+    conflicts += merged.conflicts;
+  }
+  result.settings = {...remote.settings};
+  for (const key of Object.keys(local.settings)) {
+    if (!sameCloudValue(base.settings[key],local.settings[key])) {
+      if (!sameCloudValue(base.settings[key],remote.settings[key]) && !sameCloudValue(local.settings[key],remote.settings[key])) conflicts++;
+      result.settings[key]=local.settings[key];
+    }
+  }
+  return {state:result, conflicts};
+}
 render();
 initializeCloud();
